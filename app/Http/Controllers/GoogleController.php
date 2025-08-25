@@ -29,9 +29,9 @@ class GoogleController extends Controller
             $user = User::updateOrCreate(
                 ['email' => $googleUser->email],
                 [
-                    'name' => $googleUser->name,
+                    'name'  => $googleUser->name ?: $googleUser->nickname,
                     'password' => bcrypt('google-login'),
-                    'role' => $googleUser->email === 'andreflik@gmail.com' ? 'adm' : 'user',
+                    'role'  => $googleUser->email === 'andreflik@gmail.com' ? 'adm' : 'user',
                 ]
             );
 
@@ -39,8 +39,10 @@ class GoogleController extends Controller
 
             $token = $user->createToken('auth_token')->plainTextToken;
 
+            $frontend = rtrim(env('FRONTEND_URL', 'http://localhost:8080'), '/');
+
             return redirect()->away(
-                'http://localhost:8080/dashboard?token=' . $token .
+                $frontend . '/dashboard?token=' . $token .
                 '&user=' . urlencode($user->name) .
                 '&role=' . $user->role
             );

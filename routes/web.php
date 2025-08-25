@@ -7,6 +7,6 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/google/redirect', [GoogleController::class, 'redirect'])->name('google.redirect');
-Route::get('/google/callback', [GoogleController::class, 'callback'])->name('google.callback');
+Route::get('/google/redirect', [GoogleController::class, 'redirectToGoogle'])->name('google.redirect');
+Route::get('/google/callback', [GoogleController::class, 'handleGoogleCallback'])->name('google.callback');
 

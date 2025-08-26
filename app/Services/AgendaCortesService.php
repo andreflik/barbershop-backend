@@ -15,6 +15,7 @@ class AgendaCortesService
         return AgendarCorte::whereDate('data_agendamento', $data)
             ->orderBy('hora_agendamento')
             ->pluck('hora_agendamento')
+            ->map(fn ($t) => substr((string)$t, 0, 5))
             ->toArray();
     }
 

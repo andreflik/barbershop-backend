@@ -10,6 +10,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\AgendaCortesController;
 use App\Http\Controllers\DashboardController;
 
+
 // Autenticação
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
@@ -62,4 +63,5 @@ Route::middleware(['auth:sanctum', 'admin'])->group(callback: function () {
     Route::delete('/admin/agendamentos/{id}', [AgendamentosAdminController::class, 'cancelar']);
 
     Route::get('/admin/usuarios', [UsuariosAdminController::class, 'index']);
+    Route::get('/servicos-publicos', [ServicosController::class, 'options']);
 });

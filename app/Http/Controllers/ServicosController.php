@@ -14,35 +14,49 @@ class ServicosController extends Controller
     {
         $q = $request->query('q');
         $perPage = (int)($request->query('per_page', 10));
+
         $servicos = Servico::query()
-            ->when($q, fn($qb) => $qb->where('servico', 'like', "%{$q}%")
-                ->orWhere('codigo', 'like', "%{$q}%"))
+            ->when($q, fn($qb) => $qb->where(function ($q2) use ($q) {
+                $q2->where('servico', 'like', "%{$q}%")
+                    ->orWhere('codigo', 'like', "%{$q}%");
+            }))
             ->orderBy('servico')
             ->paginate($perPage);
+
         return response()->json($servicos);
     }
-
 
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'codigo' => 'nullable|string|max:30|unique:servicos,codigo',
+            'codigo'  => 'required|string|max:30|unique:servicos,codigo',
             'servico' => 'required|string|max:120',
+            'preco'   => 'required|numeric|min:0|max:999999.99',
         ]);
+
         $servico = Servico::create($data);
         return response()->json($servico, 201);
     }
 
-
     public function update(int $id, Request $request): JsonResponse
     {
         $servico = Servico::findOrFail($id);
+
         $data = $request->validate([
-            'codigo' => 'nullable|string|max:30|unique:servicos,codigo,' . $servico->id,
+            'codigo'  => 'required|string|max:30|unique:servicos,codigo,' . $servico->id,
             'servico' => 'required|string|max:120',
+            'preco'   => 'required|numeric|min:0|max:999999.99',
         ]);
+
         $servico->update($data);
         return response()->json($servico);
+    }
+
+    public function options()
+    {
+        return response()->json(
+            Servico::orderBy('servico')->get(['id','servico','preco'])
+        );
     }
 
 
@@ -51,11 +65,6 @@ class ServicosController extends Controller
         $servico = Servico::findOrFail($id);
         $servico->delete();
         return response()->json(['message' => 'Serviço excluído']);
-    }
-
-    public function options()
-    {
-        return response()->json(\App\Models\Servico::orderBy('servico')->get(['id','servico']));
     }
 }
 

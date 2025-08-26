@@ -13,7 +13,12 @@ class Servico extends Model
 
     protected $fillable = [
         'codigo',
-        'servico'
+        'servico',
+        'preco'
+    ];
+
+    protected $casts = [
+        'preco' => 'decimal:2',
     ];
 
     public function agendamentos()

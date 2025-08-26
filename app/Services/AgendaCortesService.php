@@ -29,50 +29,27 @@ class AgendaCortesService
     /**
      * Salva um novo agendamento, garantindo que o usuário esteja autenticado e os dados sejam válidos.
      */
-    public function salvarAgendamento(array $dados)
+    public function salvarAgendamento(array $dados, $user)
     {
-        $user = Auth::user();
+        // Conflito?
+        $existe = AgendarCorte::where('data_agendamento', $dados['data_agendamento'])
+            ->where('hora_agendamento', $dados['hora_agendamento'])
+            ->exists();
 
-        if (!$user) {
-            throw ValidationException::withMessages(['error' => 'Usuário não autenticado']);
+        if ($existe) {
+            throw new \DomainException('Esse horário já está agendado.');
         }
 
-        // Valida os dados
-        validator($dados, [
-            'data_agendamento' => 'required|date|after_or_equal:today',
-            'hora_agendamento' => 'required|date_format:H:i',
-            'servico_id' => 'required|exists:servicos,id',
-        ])->validate();
+        $ag = AgendarCorte::create([
+            'user_id'          => $user->id,
+            'servico_id'       => $dados['servico_id'],
+            'data_agendamento' => $dados['data_agendamento'],
+            'hora_agendamento' => $dados['hora_agendamento'],
+        ]);
 
-        $dados['usuario_id'] = $user->id;
-
-        $agendamentoExistente = $this->agendaCortesRepository->existeAgendamento(
-            $dados['data_agendamento'],
-            $dados['hora_agendamento']
-        );
-
-        if($agendamentoExistente)
-        {
-            throw ValidationException::withMessages([
-                'horario' => 'Já existe agendamento para esse horário',
-            ]);
-        }
-
-        $agendamento =  $this->agendaCortesRepository->saveAgendamento($dados);
-
-        $servico = \App\Models\Servico::find($dados['servico_id']);
-        $nomeServico = $servico ? $servico->servico : 'Serviço não identificado';
-
-        $this->emailService->enviarConfirmacaoAgendamento(
-            $user->name,
-            $user->email,
-            $dados['data_agendamento'],
-            $dados['hora_agendamento'],
-            $nomeServico,
-        );
-
-        return $agendamento;
+        return $ag->load('servico','user');
     }
+
 
     public function listarServicos()
     {

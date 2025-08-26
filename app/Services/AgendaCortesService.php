@@ -4,13 +4,15 @@ namespace App\Services;
 
 use App\Models\AgendarCorte;
 use App\Models\Servico;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class AgendaCortesService
 {
     public function getBookedTimes(string $data): array
     {
-        return AgendarCorte::where('data_agendamento', $data)
+        return AgendarCorte::whereDate('data_agendamento', $data)
             ->orderBy('hora_agendamento')
             ->pluck('hora_agendamento')
             ->toArray();
@@ -18,19 +20,26 @@ class AgendaCortesService
 
     public function listarServicos()
     {
-        // ajuste os campos conforme seu model (ex.: 'preco' se existir)
         return Servico::orderBy('servico')
             ->get(['id', 'codigo', 'servico', 'preco']);
     }
 
-    /**
-     * Cria um agendamento; lança DomainException se horário já estiver ocupado.
-     */
-    public function salvarAgendamento(array $dados, $user): AgendarCorte
+    public function salvarAgendamento(array $input): AgendarCorte
     {
-        return DB::transaction(function () use ($dados, $user) {
-            $conflito = AgendarCorte::where('data_agendamento', $dados['data_agendamento'])
-                ->where('hora_agendamento', $dados['hora_agendamento'])
+        $userId = Auth::id();
+        if (!$userId) {
+            throw new \Exception('Usuário não autenticado.');
+        }
+
+        $data = Validator::make($input, [
+            'servico_id'       => 'required|exists:servicos,id',
+            'data_agendamento' => 'required|date_format:Y-m-d',
+            'hora_agendamento' => 'required|date_format:H:i',
+        ])->validate();
+
+        return DB::transaction(function () use ($data, $userId) {
+            $conflito = AgendarCorte::whereDate('data_agendamento', $data['data_agendamento'])
+                ->where('hora_agendamento', $data['hora_agendamento'])
                 ->lockForUpdate()
                 ->exists();
 
@@ -39,13 +48,13 @@ class AgendaCortesService
             }
 
             $ag = AgendarCorte::create([
-                'user_id'          => $user->id,
-                'servico_id'       => $dados['servico_id'],
-                'data_agendamento' => $dados['data_agendamento'],
-                'hora_agendamento' => $dados['hora_agendamento'],
+                'usuario_id'       => $userId,
+                'servico_id'       => $data['servico_id'],
+                'data_agendamento' => $data['data_agendamento'],
+                'hora_agendamento' => $data['hora_agendamento'],
             ]);
 
-            return $ag->load(['user', 'servico']);
+            return $ag->load(['servico', 'usuario']);
         });
     }
 

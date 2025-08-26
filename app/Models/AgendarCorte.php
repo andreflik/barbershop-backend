@@ -2,21 +2,22 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class AgendarCorte extends Model
 {
-    use HasFactory;
+    protected $table = 'agendar_cortes';
 
     protected $fillable = [
         'usuario_id',
+        'servico_id',
         'data_agendamento',
         'hora_agendamento',
-        'servico_id',
+        'status',
     ];
 
-    public function usuario(){
+    public function usuario()
+    {
         return $this->belongsTo(User::class, 'usuario_id');
     }
 

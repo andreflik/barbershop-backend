@@ -2,84 +2,56 @@
 
 namespace App\Services;
 
-use App\Repositories\AgendaCortesRepository;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\ValidationException;
-use App\Services\EmailService;
+use App\Models\AgendarCorte;
+use App\Models\Servico;
+use Illuminate\Support\Facades\DB;
 
 class AgendaCortesService
 {
-    protected AgendaCortesRepository $agendaCortesRepository;
-    protected EmailService $emailService;
-
-    public function __construct(AgendaCortesRepository $agendaCortesRepository, EmailService $emailService)
+    public function getBookedTimes(string $data): array
     {
-        $this->agendaCortesRepository = $agendaCortesRepository;
-        $this->emailService = $emailService;
+        return AgendarCorte::where('data_agendamento', $data)
+            ->orderBy('hora_agendamento')
+            ->pluck('hora_agendamento')
+            ->toArray();
     }
-
-    /**
-     * Obtém horários agendados para uma data específica.
-     */
-    public function getBookedTimes(string $data)
-    {
-        return $this->agendaCortesRepository->getBookedTimes($data);
-    }
-
-    /**
-     * Salva um novo agendamento, garantindo que o usuário esteja autenticado e os dados sejam válidos.
-     */
-    public function salvarAgendamento(array $dados, $user)
-    {
-        // Conflito?
-        $existe = AgendarCorte::where('data_agendamento', $dados['data_agendamento'])
-            ->where('hora_agendamento', $dados['hora_agendamento'])
-            ->exists();
-
-        if ($existe) {
-            throw new \DomainException('Esse horário já está agendado.');
-        }
-
-        $ag = AgendarCorte::create([
-            'user_id'          => $user->id,
-            'servico_id'       => $dados['servico_id'],
-            'data_agendamento' => $dados['data_agendamento'],
-            'hora_agendamento' => $dados['hora_agendamento'],
-        ]);
-
-        return $ag->load('servico','user');
-    }
-
 
     public function listarServicos()
     {
-        return $this->agendaCortesRepository->listarServicos();
+        // ajuste os campos conforme seu model (ex.: 'preco' se existir)
+        return Servico::orderBy('servico')
+            ->get(['id', 'codigo', 'servico', 'preco']);
     }
 
-    public function excluirAgendamento(int $id)
+    /**
+     * Cria um agendamento; lança DomainException se horário já estiver ocupado.
+     */
+    public function salvarAgendamento(array $dados, $user): AgendarCorte
     {
-        $agendamento = $this->agendaCortesRepository->buscarPorId($id);
+        return DB::transaction(function () use ($dados, $user) {
+            $conflito = AgendarCorte::where('data_agendamento', $dados['data_agendamento'])
+                ->where('hora_agendamento', $dados['hora_agendamento'])
+                ->lockForUpdate()
+                ->exists();
 
-        if (!$agendamento) {
-            throw new \Exception('Agendamento não encontrado.');
-        }
+            if ($conflito) {
+                throw new \DomainException('Esse horário já está agendado.');
+            }
 
-        $user = Auth::user();
+            $ag = AgendarCorte::create([
+                'user_id'          => $user->id,
+                'servico_id'       => $dados['servico_id'],
+                'data_agendamento' => $dados['data_agendamento'],
+                'hora_agendamento' => $dados['hora_agendamento'],
+            ]);
 
-        if ($agendamento->usuario_id !== $user->id) {
-            throw new \Exception('Ação não permitida.');
-        }
-
-        $this->emailService->enviarCancelamentoAgendamento(
-            $user->name,
-            $user->email,
-            $agendamento->data_agendamento,
-            $agendamento->hora_agendamento,
-            $agendamento->servico->servico ?? 'Não informado'
-        );
-
-        $this->agendaCortesRepository->excluir($agendamento);
+            return $ag->load(['user', 'servico']);
+        });
     }
 
-
+    public function excluirAgendamento(int $id): void
+    {
+        $ag = AgendarCorte::findOrFail($id);
+        $ag->delete();
+    }
 }

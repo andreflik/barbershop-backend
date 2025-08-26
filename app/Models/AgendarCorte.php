@@ -16,6 +16,11 @@ class AgendarCorte extends Model
         'status',
     ];
 
+    protected $casts = [
+        'data_agendamento' => 'date:Y-m-d',
+        'hora_agendamento' => 'string',
+    ];
+
     public function usuario()
     {
         return $this->belongsTo(User::class, 'usuario_id');

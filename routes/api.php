@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AgendamentosAdminController;
 use App\Http\Controllers\ServicosController;
 use App\Http\Controllers\UsuariosAdminController;
+use Illuminate\Support\Facades\Mail;
 
 // --------- Público / Auth ----------
 Route::post('/login',    [AuthController::class, 'login'])->name('login');
@@ -64,3 +65,19 @@ Route::get('usuarios/options', [UsuariosAdminController::class, 'options']);
 
 // Público (sem auth): opções de serviços para página de contato, se quiser
 Route::get('/servicos-publicos', [ServicosController::class, 'options']);
+
+
+
+Route::get('/_mail/test', function () {
+    try {
+        Mail::raw('Teste OK do SMTP (Koyeb).', function ($m) {
+            $m->to('seu-email-teste@outlook.com');
+            $m->from(config('mail.from.address'), config('mail.from.name'));
+            $m->subject('Teste SMTP • BarberShop');
+        });
+        return response()->json(['ok' => true]);
+    } catch (\Throwable $e) {
+        return response()->json(['ok' => false, 'err' => $e->getMessage()], 500);
+    }
+});
+

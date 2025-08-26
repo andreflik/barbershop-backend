@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Models\Servico;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 
 class ServicosController extends Controller
@@ -52,11 +53,17 @@ class ServicosController extends Controller
         return response()->json($servico);
     }
 
-    public function options()
+    public function options(): JsonResponse
     {
-        return response()->json(
-            Servico::orderBy('servico')->get(['id','servico','preco'])
-        );
+        try {
+
+            return response()->json(
+                Servico::query()->orderBy('servico')->get(['id','servico'])
+            );
+        } catch (\Throwable $e) {
+            Log::error('admin.servicos.options', ['err' => $e->getMessage()]);
+            return response()->json(['message' => 'Erro ao carregar opções'], 500);
+        }
     }
 
 

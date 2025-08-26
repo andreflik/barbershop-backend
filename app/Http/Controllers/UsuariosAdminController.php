@@ -23,9 +23,11 @@ class UsuariosAdminController extends Controller
         return response()->json($users);
     }
 
-    public function options()
+    public function options(): JsonResponse
     {
-        return response()->json(\App\Models\User::orderBy('name')->get(['id','name']));
+        return response()->json(
+            User::query()->orderBy('name')->get(['id','name'])
+        );
     }
 
 }

@@ -64,44 +64,17 @@ class AgendaCortesController extends Controller
         }
 
         try {
-            // 2) Cria o agendamento (o service deve checar conflito de horário)
-            $agendamento = $this->agendaCortesService->salvarAgendamento(
-                $v->validated(),
-                $request->user() // passa o usuário autenticado
-            );
-
-            // 3) Tenta enviar e-mail (se falhar, só loga; não quebra o fluxo)
-            try {
-                if ($request->user() && $request->user()->email) {
-                    Mail::to($request->user()->email)->send(new AppointmentConfirmed($agendamento));
-                }
-                // Opcional: cópia para o adm
-                if (env('MAIL_ADMIN')) {
-                    Mail::to(env('MAIL_ADMIN'))->send(new AppointmentConfirmed($agendamento));
-                }
-            } catch (\Throwable $mailErr) {
-                Log::error('Falha ao enviar e-mail de confirmação', [
-                    'error' => $mailErr->getMessage(),
-                ]);
+            if ($request->user()?->email) {
+                Mail::to($request->user()->email)->send(new AppointmentConfirmed($agendamento));
             }
-
-            return response()->json([
-                'success'      => true,
-                'message'      => 'Agendamento salvo com sucesso! Você receberá um e-mail de confirmação.',
-                'agendamento'  => $agendamento,
-            ], 201);
-
-        } catch (\DomainException $e) {
-            // Use DomainException no service para conflitos como "horário já ocupado"
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 409);
-
-        } catch (\Throwable $e) {
-            Log::error('Erro ao salvar agendamento', ['error' => $e->getMessage()]);
-            return response()->json([
-                'message' => 'Não foi possível salvar o agendamento.',
-            ], 400);
+            if (env('MAIL_ADMIN')) {
+                Mail::to(env('MAIL_ADMIN'))->send(new AppointmentConfirmed($agendamento));
+            }
+        } catch (\Throwable $mailErr) {
+                Log::error('Falha ao enviar e-mail', [
+                'msg' => $mailErr->getMessage(),
+                'trace' => $mailErr->getTraceAsString(),
+            ]);
         }
     }
 

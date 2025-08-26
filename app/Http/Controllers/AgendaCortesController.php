@@ -42,11 +42,11 @@ class AgendaCortesController extends Controller
      */
     public function salvarAgendamento(Request $request): JsonResponse
     {
-        // 1) Validação amigável (422 em caso de erro)
+        // 1) validação
         $v = Validator::make($request->all(), [
             'data_agendamento' => ['required', 'date_format:Y-m-d'],
             'hora_agendamento' => ['required', 'date_format:H:i'],
-            'servico_id'       => ['required', 'integer', 'exists:servicos,id'],
+            'servico_id' => ['required', 'integer', 'exists:servicos,id'],
         ], [
             'data_agendamento.required' => 'Selecione a data.',
             'data_agendamento.date_format' => 'Data inválida (use Y-m-d).',
@@ -59,22 +59,49 @@ class AgendaCortesController extends Controller
         if ($v->fails()) {
             return response()->json([
                 'message' => 'Erro de validação.',
-                'errors'  => $v->errors(),
+                'errors' => $v->errors(),
             ], 422);
         }
 
         try {
-            if ($request->user()?->email) {
-                Mail::to($request->user()->email)->send(new AppointmentConfirmed($agendamento));
-            }
-            if (env('MAIL_ADMIN')) {
-                Mail::to(env('MAIL_ADMIN'))->send(new AppointmentConfirmed($agendamento));
-            }
-        } catch (\Throwable $mailErr) {
+            // 2) cria o agendamento (o service já usa Auth::id())
+            $agendamento = $this->agendaCortesService->salvarAgendamento($v->validated());
+
+            // 3) tenta enviar e-mail; se der erro, só loga e segue
+            try {
+                $user = $request->user();
+                if ($user && $user->email) {
+                    Mail::to($user->email)->send(new AppointmentConfirmed($agendamento));
+                }
+                $admin = env('MAIL_ADMIN');
+                if (!empty($admin)) {
+                    Mail::to($admin)->send(new AppointmentConfirmed($agendamento));
+                }
+            } catch (\Throwable $mailErr) {
                 Log::error('Falha ao enviar e-mail', [
-                'msg' => $mailErr->getMessage(),
-                'trace' => $mailErr->getTraceAsString(),
-            ]);
+                    'msg' => $mailErr->getMessage(),
+                ]);
+                // NÃO dá return aqui: seguimos com sucesso do agendamento
+            }
+
+            // 4) resposta de sucesso SEMPRE acontece
+            return response()->json([
+                'success' => true,
+                'message' => 'Agendamento salvo com sucesso! Você receberá um e-mail de confirmação.',
+                'agendamento' => $agendamento,
+            ], 201);
+
+        } catch (\DomainException $e) {
+            // conflito de horário (trava de concorrência no service)
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 409);
+
+        } catch (\Throwable $e) {
+            Log::error('Erro ao salvar agendamento', ['error' => $e->getMessage()]);
+            return response()->json([
+                'message' => 'Não foi possível salvar o agendamento.',
+            ], 400);
         }
     }
 

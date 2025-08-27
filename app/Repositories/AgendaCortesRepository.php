@@ -9,43 +9,59 @@ use Illuminate\Support\Collection;
 class AgendaCortesRepository
 {
     /**
-     * Obtém os horários agendados para uma determinada data.
+     * Horários agendados (HH:mm) para a data (YYYY-mm-dd).
      */
     public function getBookedTimes(string $data): Collection
     {
-        return AgendarCorte::where('data_agendamento', $data)
+        return AgendarCorte::query()
+            ->whereDate('data_agendamento', $data)
+            ->orderBy('hora_agendamento')
             ->pluck('hora_agendamento')
-            ->map(function ($hora) {
-                return substr($hora, 0, 5);
-            });
+            ->map(fn ($hora) => substr((string) $hora, 0, 5));
     }
 
     /**
-     * Salva um novo agendamento no banco de dados.
+     * Cria um agendamento (campos já validados no service/controller).
      */
     public function saveAgendamento(array $dados): AgendarCorte
     {
+        // Model já tem $fillable seguro
         return AgendarCorte::create($dados);
     }
 
-    public function existeAgendamento($data, $hora): bool
+    /**
+     * Verifica se já existe agendamento no mesmo slot.
+     */
+    public function existeAgendamento(string $data, string $hora): bool
     {
-        return AgendarCorte::where('data_agendamento', $data)
+        return AgendarCorte::query()
+            ->whereDate('data_agendamento', $data)
             ->where('hora_agendamento', $hora)
             ->exists();
     }
 
-    public function listarServicos()
+    /**
+     * Lista serviços para seleção (campos essenciais).
+     */
+    public function listarServicos(): Collection
     {
-        return \App\Models\Servico::all(['id', 'servico']);
+        return Servico::query()
+            ->orderBy('servico')
+            ->get(['id', 'codigo', 'servico', 'preco']);
     }
 
-    public function buscarPorId(int $id)
+    /**
+     * Busca por ID (casos de edição/exclusão).
+     */
+    public function buscarPorId(int $id): ?AgendarCorte
     {
         return AgendarCorte::find($id);
     }
 
-    public function excluir($agendamento)
+    /**
+     * Remove um agendamento já carregado.
+     */
+    public function excluir(AgendarCorte $agendamento): void
     {
         $agendamento->delete();
     }

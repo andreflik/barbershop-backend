@@ -14,7 +14,7 @@ class Servico extends Model
     protected $fillable = [
         'codigo',
         'servico',
-        'preco'
+        'preco',
     ];
 
     protected $casts = [
@@ -23,6 +23,6 @@ class Servico extends Model
 
     public function agendamentos()
     {
-        return $this->hasMany(AgendarCorte::class);
+        return $this->hasMany(AgendarCorte::class, 'servico_id');
     }
 }

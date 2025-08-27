@@ -2,29 +2,38 @@
 
 namespace App\Http\Controllers;
 
-
 use App\Models\Servico;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Log;
-
+use Illuminate\Database\QueryException;
 
 class ServicosController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $q = $request->query('q');
-        $perPage = (int)($request->query('per_page', 10));
+        $validated = $request->validate([
+            'q'        => 'nullable|string|max:120',
+            'per_page' => 'nullable|integer|min:5|max:50',
+            'page'     => 'nullable|integer|min:1',
+        ]);
 
-        $servicos = Servico::query()
-            ->when($q, fn($qb) => $qb->where(function ($q2) use ($q) {
-                $q2->where('servico', 'like', "%{$q}%")
-                    ->orWhere('codigo', 'like', "%{$q}%");
-            }))
-            ->orderBy('servico')
-            ->paginate($perPage);
+        $q        = $validated['q'] ?? null;
+        $perPage  = (int)($validated['per_page'] ?? 10);
+        $page     = (int)($validated['page'] ?? 1);
 
-        return response()->json($servicos);
+        $qb = Servico::query()
+            ->select(['id', 'codigo', 'servico', 'preco'])
+            ->when($q, function ($qb2) use ($q) {
+                $qb2->where(function ($inner) use ($q) {
+                    $inner->where('servico', 'like', "%{$q}%")
+                        ->orWhere('codigo', 'like', "%{$q}%");
+                });
+            })
+            ->orderBy('servico');
+
+        $paginator = $qb->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json($paginator);
     }
 
     public function store(Request $request): JsonResponse
@@ -36,7 +45,13 @@ class ServicosController extends Controller
         ]);
 
         $servico = Servico::create($data);
-        return response()->json($servico, 201);
+
+        return response()->json([
+            'id'      => $servico->id,
+            'codigo'  => $servico->codigo,
+            'servico' => $servico->servico,
+            'preco'   => $servico->preco,
+        ], 201);
     }
 
     public function update(int $id, Request $request): JsonResponse
@@ -50,28 +65,41 @@ class ServicosController extends Controller
         ]);
 
         $servico->update($data);
-        return response()->json($servico);
+
+        return response()->json([
+            'id'      => $servico->id,
+            'codigo'  => $servico->codigo,
+            'servico' => $servico->servico,
+            'preco'   => $servico->preco,
+        ]);
     }
 
     public function options(): JsonResponse
     {
         try {
-
             return response()->json(
-                Servico::query()->orderBy('servico')->get(['id','servico'])
+                Servico::query()->orderBy('servico')->get(['id', 'servico'])
             );
         } catch (\Throwable $e) {
-            Log::error('admin.servicos.options', ['err' => $e->getMessage()]);
             return response()->json(['message' => 'Erro ao carregar opções'], 500);
         }
     }
 
-
     public function destroy(int $id): JsonResponse
     {
         $servico = Servico::findOrFail($id);
-        $servico->delete();
-        return response()->json(['message' => 'Serviço excluído']);
+
+        try {
+            $servico->delete();
+            return response()->json(['message' => 'Serviço excluído']);
+        } catch (QueryException $e) {
+            // chave estrangeira / restrição
+            if ((string)$e->getCode() === '23000') {
+                return response()->json([
+                    'message' => 'Não é possível excluir: serviço em uso em agendamentos.'
+                ], 409);
+            }
+            return response()->json(['message' => 'Erro ao excluir serviço'], 500);
+        }
     }
 }
-

@@ -6,9 +6,9 @@ use App\Services\AgendaCortesService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\AppointmentConfirmed;
+use Illuminate\Auth\Access\AuthorizationException;
 
 class AgendaCortesController extends Controller
 {
@@ -22,19 +22,37 @@ class AgendaCortesController extends Controller
     /**
      * Horários já agendados para a data.
      */
-    public function getBookedTimes($data): JsonResponse
+    public function getBookedTimes(string $data): JsonResponse
     {
+        // valida data (YYYY-mm-dd) rapidamente
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
+            return response()->json(['message' => 'Data inválida.'], 422);
+        }
+
         $bookedTimes = $this->agendaCortesService->getBookedTimes($data);
         return response()->json(['bookedTimes' => $bookedTimes]);
     }
 
     /**
      * Lista serviços para o agendamento (público/autenticado).
+     * Retorna apenas campos necessários.
      */
     public function listarServicos(): JsonResponse
     {
         $servicos = $this->agendaCortesService->listarServicos();
-        return response()->json(['servicos' => $servicos]);
+
+        // normaliza: id, nome (ou servico), duracao_minutos, preco
+        $safe = collect($servicos)->map(function ($s) {
+            $arr = is_array($s) ? $s : $s->toArray();
+            return [
+                'id'               => $arr['id'] ?? null,
+                'nome'             => $arr['nome'] ?? ($arr['servico'] ?? null),
+                'duracao_minutos'  => $arr['duracao_minutos'] ?? null,
+                'preco'            => $arr['preco'] ?? null,
+            ];
+        })->values();
+
+        return response()->json(['servicos' => $safe]);
     }
 
     /**
@@ -42,66 +60,49 @@ class AgendaCortesController extends Controller
      */
     public function salvarAgendamento(Request $request): JsonResponse
     {
-        // 1) validação
-        $v = Validator::make($request->all(), [
-            'data_agendamento' => ['required', 'date_format:Y-m-d'],
+        // validação
+        $validated = $request->validate([
+            'data_agendamento' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'hora_agendamento' => ['required', 'date_format:H:i'],
-            'servico_id' => ['required', 'integer', 'exists:servicos,id'],
-        ], [
-            'data_agendamento.required' => 'Selecione a data.',
-            'data_agendamento.date_format' => 'Data inválida (use Y-m-d).',
-            'hora_agendamento.required' => 'Selecione o horário.',
-            'hora_agendamento.date_format' => 'Horário inválido (use HH:mm).',
-            'servico_id.required' => 'Selecione o serviço.',
-            'servico_id.exists' => 'Serviço inválido.',
+            'servico_id'       => ['required', 'integer', 'exists:servicos,id'],
+            'observacao'       => ['nullable', 'string', 'max:255'],
         ]);
 
-        if ($v->fails()) {
-            return response()->json([
-                'message' => 'Erro de validação.',
-                'errors' => $v->errors(),
-            ], 422);
-        }
-
         try {
-            // 2) cria o agendamento (o service já usa Auth::id())
-            $agendamento = $this->agendaCortesService->salvarAgendamento($v->validated());
+            // cria (service deve usar Auth::id e checar conflitos)
+            $agendamento = $this->agendaCortesService->salvarAgendamento($validated);
 
-            // 3) tenta enviar e-mail; se der erro, só loga e segue
+            // dispara e-mails (best-effort)
             try {
                 $user = $request->user();
                 if ($user && $user->email) {
                     Mail::to($user->email)->send(new AppointmentConfirmed($agendamento));
                 }
-                $admin = env('MAIL_ADMIN');
-                if (!empty($admin)) {
+                if ($admin = env('MAIL_ADMIN')) {
                     Mail::to($admin)->send(new AppointmentConfirmed($agendamento));
                 }
             } catch (\Throwable $mailErr) {
-                Log::error('Falha ao enviar e-mail', [
-                    'msg' => $mailErr->getMessage(),
-                ]);
-                // NÃO dá return aqui: seguimos com sucesso do agendamento
+                // log discreto
+                Log::error('Falha ao enviar e-mail de confirmação.');
             }
 
-            // 4) resposta de sucesso SEMPRE acontece
+            // resposta segura/minimalista
             return response()->json([
-                'success' => true,
-                'message' => 'Agendamento salvo com sucesso! Você receberá um e-mail de confirmação.',
-                'agendamento' => $agendamento,
+                'success'      => true,
+                'message'      => 'Agendamento salvo com sucesso!',
+                'agendamento'  => $this->mapAgendamentoSafe($agendamento),
             ], 201);
 
         } catch (\DomainException $e) {
-            // conflito de horário (trava de concorrência no service)
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 409);
+            // conflito de horário, etc.
+            return response()->json(['message' => $e->getMessage()], 409);
+
+        } catch (AuthorizationException $e) {
+            return response()->json(['message' => 'Operação não permitida.'], 403);
 
         } catch (\Throwable $e) {
-            Log::error('Erro ao salvar agendamento', ['error' => $e->getMessage()]);
-            return response()->json([
-                'message' => 'Não foi possível salvar o agendamento.',
-            ], 400);
+            Log::error('Erro ao salvar agendamento.');
+            return response()->json(['message' => 'Não foi possível salvar o agendamento.'], 400);
         }
     }
 
@@ -113,9 +114,42 @@ class AgendaCortesController extends Controller
         try {
             $this->agendaCortesService->excluirAgendamento($id);
             return response()->json(['message' => 'Agendamento excluído com sucesso.']);
+        } catch (AuthorizationException $e) {
+            return response()->json(['message' => 'Operação não permitida.'], 403);
         } catch (\Throwable $e) {
-            Log::error('Erro ao excluir agendamento', ['error' => $e->getMessage()]);
+            Log::error('Erro ao excluir agendamento.');
             return response()->json(['message' => 'Erro ao excluir o agendamento.'], 400);
         }
+    }
+
+    private function mapAgendamentoSafe($ag): array
+    {
+        // aceita Model ou array
+        $get = function ($obj, $key, $default = null) {
+            if (is_array($obj)) return $obj[$key] ?? $default;
+            return $obj->{$key} ?? $default;
+        };
+
+        $serv = $get($ag, 'servico');
+        $servId = $get($ag, 'servico_id');
+        $servNome = null;
+
+        if (is_array($serv)) {
+            $servNome = $serv['nome'] ?? ($serv['servico'] ?? null);
+            $servId   = $serv['id'] ?? $servId;
+        } elseif (is_object($serv)) {
+            $servNome = $serv->nome ?? ($serv->servico ?? null);
+            $servId   = $serv->id ?? $servId;
+        }
+
+        return [
+            'id'               => $get($ag, 'id'),
+            'data_agendamento' => $get($ag, 'data_agendamento'),
+            'hora_agendamento' => $get($ag, 'hora_agendamento'),
+            'servico'          => [
+                'id'   => $servId,
+                'nome' => $servNome,
+            ],
+        ];
     }
 }

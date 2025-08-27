@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 
 class GoogleController extends Controller
 {
-    public function redirectToGoogle()
+    public function redirectToGoogle(): JsonResponse|\Symfony\Component\HttpFoundation\RedirectResponse
     {
         return Socialite::driver('google')
             ->scopes(['openid', 'email', 'profile'])
@@ -23,45 +26,48 @@ class GoogleController extends Controller
             $googleUser = Socialite::driver('google')->stateless()->user();
 
             if (!$googleUser || !$googleUser->email) {
-                return response()->json(['error' => 'Erro ao autenticar com o Google.'], 401);
+                return response()->json(['error' => 'Falha na autenticação.'], 401);
             }
 
+            // e-mail normalizado (minúsculo)
+            $email = strtolower($googleUser->email);
+
             $user = User::updateOrCreate(
-                ['email' => $googleUser->email],
+                ['email' => $email],
                 [
-                    'name'  => $googleUser->name ?: $googleUser->nickname,
-                    'password' => bcrypt('google-login'),
-                    'role'  => $googleUser->email === 'andreflik@gmail.com' ? 'adm' : 'user',
+                    'name'     => $googleUser->name ?: $googleUser->nickname,
+                    // senha randômica para evitar login por senha acidental
+                    'password' => Hash::make(Str::random(40)),
+                    // regra simples de role (ajuste se quiser algo mais robusto)
+                    'role'     => $email === 'andreflik@gmail.com' ? 'adm' : 'user',
                 ]
             );
 
             Auth::login($user);
 
+            // Token Sanctum (expiração via SANCTUM_EXPIRATION)
             $token = $user->createToken('auth_token')->plainTextToken;
 
             $frontend = rtrim(env('FRONTEND_URL', 'http://localhost:8080'), '/');
 
+            // Fragmento (#) para não vazar no Network/Referer
             return redirect()->away(
-                $frontend . '/dashboard?token=' . $token .
+                $frontend . '/dashboard#token=' . $token .
                 '&user=' . urlencode($user->name) .
                 '&role=' . $user->role
             );
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Falha ao autenticar com Google: ' . $e->getMessage()
-            ], 500);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Falha ao autenticar com Google.'], 500);
         }
     }
 
-    public function getUsername(Request $request): \Illuminate\Http\JsonResponse
+    public function getUsername(Request $request): JsonResponse
     {
         if (!Auth::check()) {
-            \Log::info('Usuário não autenticado.');
             return response()->json(['error' => 'Usuário não identificado'], 401);
         }
 
         $user = $request->user();
-        \Log::info('Nome do usuário autenticado:', ['name' => $user->name]);
         return response()->json(['user' => $user->name], 200);
     }
 }

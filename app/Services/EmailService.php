@@ -7,31 +7,49 @@ use Illuminate\Support\Carbon;
 
 class EmailService
 {
-    public function enviarConfirmacaoAgendamento($nome, $email, $data, $hora, $servico)
+    /**
+     * Envia confirmação (best-effort). Não lança para o chamador.
+     */
+    public function enviarConfirmacaoAgendamento(string $nome, string $email, string $data, string $hora, string $servico): bool
     {
-        $dados = [
-            'nome' => $nome,
-            'data' => Carbon::parse($data)->format('d/m/Y'),
-            'hora' => Carbon::parse($hora)->format('H:i'),
-            'servico' => $servico,
-        ];
+        try {
+            $dados = [
+                'nome'    => $nome,
+                'data'    => Carbon::createFromFormat('Y-m-d', $data)->format('d/m/Y'),
+                'hora'    => Carbon::createFromFormat('H:i',   $hora)->format('H:i'),
+                'servico' => $servico,
+            ];
 
-        Mail::send('emails.confirmacao_agendamento', $dados, function ($message) use ($email, $nome) {
-           $message->to($email, $nome)->subject('Confirmação de Agendamento de Corte');
-        });
+            Mail::send('emails.confirmacao_agendamento', $dados, function ($message) use ($email, $nome) {
+                $message->to($email, $nome)->subject('Confirmação de Agendamento de Corte');
+            });
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
-    public function enviarCancelamentoAgendamento($nome, $email, $data, $hora, $servico)
+    /**
+     * Envia cancelamento (best-effort). Não lança para o chamador.
+     */
+    public function enviarCancelamentoAgendamento(string $nome, string $email, string $data, string $hora, string $servico): bool
     {
-        $dados = [
-            'nome' => $nome,
-            'data' => Carbon::parse($data)->format('d/m/Y'),
-            'hora' => Carbon::parse($hora)->format('H:i'),
-            'servico' => $servico,
-        ];
+        try {
+            $dados = [
+                'nome'    => $nome,
+                'data'    => Carbon::createFromFormat('Y-m-d', $data)->format('d/m/Y'),
+                'hora'    => Carbon::createFromFormat('H:i',   $hora)->format('H:i'),
+                'servico' => $servico,
+            ];
 
-        Mail::send('emails.cancelamento_agendamento', $dados, function ($message) use ($email, $nome) {
-            $message->to($email, $nome)->subject('Cancelamento de Agendamento de Corte');
-        });
+            Mail::send('emails.cancelamento_agendamento', $dados, function ($message) use ($email, $nome) {
+                $message->to($email, $nome)->subject('Cancelamento de Agendamento de Corte');
+            });
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }

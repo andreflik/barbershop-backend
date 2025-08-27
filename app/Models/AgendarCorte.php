@@ -4,6 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int         $id
+ * @property int         $usuario_id
+ * @property int|null    $servico_id
+ * @property \Carbon\CarbonInterface $data_agendamento
+ * @property string      $hora_agendamento
+ * @property string|null $status
+ */
 class AgendarCorte extends Model
 {
     protected $table = 'agendar_cortes';
@@ -17,9 +25,10 @@ class AgendarCorte extends Model
     ];
 
     protected $casts = [
-        'data_agendamento' => 'date:Y-m-d',
+        'data_agendamento' => 'string',
         'hora_agendamento' => 'string',
     ];
+
 
     public function usuario()
     {

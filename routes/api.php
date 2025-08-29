@@ -82,6 +82,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     Route::get('calendar/list', [CalendarController::class, 'listEvents'])
         ->name('calendar.list');
+
+    Route::get('/servicos-publicos', [ServicosController::class, 'publicList']);
 });
 
 /*
@@ -127,6 +129,7 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])
             ->whereNumber('id')
             ->middleware('throttle:30,1');
         Route::get('servicos/options', [ServicosController::class, 'options']);
+
 
         // Usuários (admin)
         Route::get('usuarios', [UsuariosAdminController::class, 'index']);

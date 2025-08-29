@@ -93,7 +93,6 @@ class ServicosController extends Controller
             $servico->delete();
             return response()->json(['message' => 'Serviço excluído']);
         } catch (QueryException $e) {
-            // chave estrangeira / restrição
             if ((string)$e->getCode() === '23000') {
                 return response()->json([
                     'message' => 'Não é possível excluir: serviço em uso em agendamentos.'
@@ -102,4 +101,24 @@ class ServicosController extends Controller
             return response()->json(['message' => 'Erro ao excluir serviço'], 500);
         }
     }
+
+
+    public function publicList(): JsonResponse
+    {
+        $itens = Servico::query()
+            ->orderBy('servico')
+            ->get(['id', 'servico', 'preco'])
+            ->map(function ($s) {
+                return [
+                    'id'      => $s->id,
+                    'servico' => $s->servico,
+                    'preco'   => (float) $s->preco, // força número
+                ];
+            });
+
+        return response()
+            ->json($itens)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    }
+
 }

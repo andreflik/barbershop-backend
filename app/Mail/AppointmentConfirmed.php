@@ -2,53 +2,50 @@
 
 namespace App\Mail;
 
-use App\Models\AgendarCorte;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
-use Illuminate\Mail\Mailables\Address;
 use Illuminate\Queue\SerializesModels;
-use Carbon\Carbon;
 
 class AppointmentConfirmed extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public AgendarCorte $agendamento) {}
+    /** @var mixed */
+    public $agendamento;
 
-    public function envelope(): Envelope
+    public function __construct($agendamento)
     {
-        return new Envelope(
-            subject: 'Confirmação de Agendamento',
-            from: new Address(
-                config('mail.from.address'),
-                config('mail.from.name')
-            ),
-        );
+        $this->agendamento = $agendamento;
     }
 
-    public function content(): Content
+    public function build()
     {
         $ag = $this->agendamento;
 
-        // Converte com segurança
-        $data = Carbon::parse($ag->data_agendamento)
-            ->timezone(config('app.timezone'))
-            ->format('d/m/Y');
+        // Protege contra nulos/strings e evita ->format() em string
+        $cliente = optional($ag->usuario)->name ?: 'Cliente';
+        $servico = optional($ag->servico)->servico ?: 'Serviço';
+        $dataPt  = !empty($ag->data_agendamento)
+            ? date('d/m/Y', strtotime((string) $ag->data_agendamento))
+            : '-';
+        $horaPt  = !empty($ag->hora_agendamento)
+            ? substr((string) $ag->hora_agendamento, 0, 5)
+            : '-';
 
-        $hora = is_string($ag->hora_agendamento)
-            ? substr($ag->hora_agendamento, 0, 5)
-            : Carbon::parse($ag->hora_agendamento)->format('H:i');
+        // Assunto amigável
+        $subject = "Confirmação de Agendamento — {$dataPt} às {$horaPt}";
 
-        return new Content(
-            view: 'emails.confirmacao_agendamento',
-            with: [
-                'nome'    => $ag->usuario->name ?? 'Cliente',
-                'data'    => $data,
-                'hora'    => $hora,
-                'servico' => $ag->servico->servico ?? '',
-            ],
-        );
+        return $this->from(
+            config('mail.from.address'),
+            config('mail.from.name')
+        )
+            ->subject($subject)
+            ->view('emails.confirmacao_agendamento')
+            ->with([
+                'cliente' => $cliente,
+                'servico' => $servico,
+                'dataPt'  => $dataPt,
+                'horaPt'  => $horaPt,
+            ]);
     }
 }

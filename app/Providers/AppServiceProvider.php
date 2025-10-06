@@ -30,6 +30,10 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
+        if (env('MAIL_COPY_ADDRESS')) {
+        Mail::alwaysBcc(env('MAIL_COPY_ADDRESS'), env('MAIL_COPY_NAME'));
+    }
+
          Model::handleLazyLoadingViolationUsing(function($model, $relation) {
              Log::warning('Lazy loading: '.get_class($model).'->'.$relation);
          });

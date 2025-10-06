@@ -32,10 +32,11 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
-        // 📧 Envia cópia oculta de todos os e-mails para o Marquinhos
         if (env('MAIL_COPY_ADDRESS')) {
-            Mail::alwaysBcc(env('MAIL_COPY_ADDRESS'), env('MAIL_COPY_NAME', 'Marquinhos'));
-        }
+        Mail::listen(function ($message) {
+            $message->getHeaders()->addTextHeader('Bcc', env('MAIL_COPY_ADDRESS'));
+        });
+    }
 
         // 🔍 Loga tentativas de lazy loading (boas práticas)
         Model::handleLazyLoadingViolationUsing(function ($model, $relation) {

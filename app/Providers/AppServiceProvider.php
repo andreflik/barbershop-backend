@@ -2,10 +2,11 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Facades\Event;
+use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 
@@ -24,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // ⚙️ Configurações para ambiente de produção
+        // ⚙️ Configurações para produção
         if (app()->isProduction()) {
             Model::preventLazyLoading();
             Model::shouldBeStrict();
@@ -32,13 +33,14 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
+        // 📧 Adiciona BCC (cópia oculta) em todos os e-mails enviados
         if (env('MAIL_COPY_ADDRESS')) {
-        Mail::listen(function ($message) {
-            $message->getHeaders()->addTextHeader('Bcc', env('MAIL_COPY_ADDRESS'));
-        });
-    }
+            Event::listen(MessageSending::class, function (MessageSending $event) {
+                $event->message->addBcc(env('MAIL_COPY_ADDRESS'));
+            });
+        }
 
-        // 🔍 Loga tentativas de lazy loading (boas práticas)
+        // 🔍 Loga lazy loading
         Model::handleLazyLoadingViolationUsing(function ($model, $relation) {
             Log::warning('Lazy loading: ' . get_class($model) . '->' . $relation);
         });

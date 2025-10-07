@@ -28,30 +28,37 @@ class AgendamentosAdminController extends Controller
         $perPage = (int)($validated['per_page'] ?? 10);
         $page    = (int)($validated['page'] ?? 1);
 
+        $hoje = Carbon::now('America/Sao_Paulo')->toDateString();
+
         $qb = AgendarCorte::query()
             ->select(['id', 'usuario_id', 'servico_id', 'data_agendamento', 'hora_agendamento'])
             ->with([
                 'usuario:id,name',
-                // 🔧 SOMENTE colunas existentes em `servicos`
                 'servico:id,servico',
             ])
-            ->orderByDesc('data_agendamento')
-            ->orderBy('hora_agendamento');
+            // 🔹 AQUI ESTÁ A MÁGICA: coloca os do dia atual primeiro
+            ->orderByRaw("CASE WHEN data_agendamento = ? THEN 0 ELSE 1 END", [$hoje])
+            ->orderBy('data_agendamento', 'asc')   // mantém o dia atual em cima e depois os futuros
+            ->orderBy('hora_agendamento', 'asc');  // ordena pelas horas dentro do dia
 
         $this->applyFilters($qb, $validated);
 
         try {
             $paginator = $qb->paginate($perPage, ['*'], 'page', $page);
 
-            // Normaliza itens (entrega "nome" derivado de servico)
             $paginator->getCollection()->transform(fn($i) => $this->mapAgendamentoAdmin($i));
 
             return response()->json($paginator);
         } catch (\Throwable $e) {
-            Log::error('admin.agendamentos.index', ['err' => $e->getMessage()]);
+            Log::error('admin.agendamentos.index', [
+                'err' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
             return response()->json(['message' => 'Falha ao listar agendamentos.'], 500);
         }
     }
+
 
     public function exportXlsx(Request $request)
     {

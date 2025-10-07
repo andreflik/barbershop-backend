@@ -53,8 +53,8 @@ class GoogleController extends Controller
             // Fragmento (#) para não vazar no Network/Referer
             return redirect()->away(
                 $frontend . '/dashboard#token=' . $token .
-                '&user=' . urlencode($user->name) .
-                '&role=' . $user->role
+                    '&user=' . urlencode($user->name) .
+                    '&role=' . $user->role
             );
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Falha ao autenticar com Google.'], 500);

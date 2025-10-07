@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\AgendamentosExport;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 
 class AgendamentosAdminController extends Controller
 {
@@ -28,7 +29,7 @@ class AgendamentosAdminController extends Controller
         $page    = (int)($validated['page'] ?? 1);
 
         $qb = AgendarCorte::query()
-            ->select(['id','usuario_id','servico_id','data_agendamento','hora_agendamento'])
+            ->select(['id', 'usuario_id', 'servico_id', 'data_agendamento', 'hora_agendamento'])
             ->with([
                 'usuario:id,name',
                 // 🔧 SOMENTE colunas existentes em `servicos`
@@ -43,7 +44,7 @@ class AgendamentosAdminController extends Controller
             $paginator = $qb->paginate($perPage, ['*'], 'page', $page);
 
             // Normaliza itens (entrega "nome" derivado de servico)
-            $paginator->getCollection()->transform(fn ($i) => $this->mapAgendamentoAdmin($i));
+            $paginator->getCollection()->transform(fn($i) => $this->mapAgendamentoAdmin($i));
 
             return response()->json($paginator);
         } catch (\Throwable $e) {
@@ -79,7 +80,7 @@ class AgendamentosAdminController extends Controller
         $limit = (int) env('ADMIN_EXPORT_LIMIT', 5000);
 
         $qb = AgendarCorte::query()
-            ->select(['id','usuario_id','servico_id','data_agendamento','hora_agendamento'])
+            ->select(['id', 'usuario_id', 'servico_id', 'data_agendamento', 'hora_agendamento'])
             ->with(['usuario:id,name', 'servico:id,servico'])
             ->orderByDesc('data_agendamento')
             ->orderBy('hora_agendamento');
@@ -87,7 +88,7 @@ class AgendamentosAdminController extends Controller
         $this->applyFilters($qb, $validated);
 
         $rows = $qb->limit($limit)->get()
-            ->map(fn ($i) => $this->mapAgendamentoAdmin($i));
+            ->map(fn($i) => $this->mapAgendamentoAdmin($i));
 
         $pdf = Pdf::loadView('exports.agendamentos', [
             'rows'    => $rows,
@@ -121,6 +122,8 @@ class AgendamentosAdminController extends Controller
         }
     }
 
+
+
     private function mapAgendamentoAdmin($item): array
     {
         $get = function ($obj, $key, $default = null) {
@@ -131,9 +134,23 @@ class AgendamentosAdminController extends Controller
         $usuario = $get($item, 'usuario');
         $servico = $get($item, 'servico');
 
+        // ✅ Ajuste explícito de timezone
+        $dataAgendamento = $get($item, 'data_agendamento');
+        $dataAgendamento = $get($item, 'data_agendamento');
+
+        if ($dataAgendamento) {
+            try {
+                $dataAgendamento = Carbon::parse($dataAgendamento)
+                    ->timezone('America/Sao_Paulo')
+                    ->format('Y-m-d');
+            } catch (\Exception $e) {
+                $dataAgendamento = (string) $dataAgendamento;
+            }
+        }
+
         return [
             'id'               => $get($item, 'id'),
-            'data_agendamento' => (string) $get($item, 'data_agendamento'),
+            'data_agendamento' => $dataAgendamento,
             'hora_agendamento' => (string) $get($item, 'hora_agendamento'),
             'usuario'          => [
                 'id'   => is_array($usuario) ? ($usuario['id'] ?? null) : ($usuario->id ?? null),
@@ -141,7 +158,6 @@ class AgendamentosAdminController extends Controller
             ],
             'servico'          => [
                 'id'   => is_array($servico) ? ($servico['id'] ?? null) : ($servico->id ?? null),
-                // entregamos "nome" derivado do campo `servico`
                 'nome' => is_array($servico)
                     ? ($servico['servico'] ?? null)
                     : ($servico->servico ?? null),

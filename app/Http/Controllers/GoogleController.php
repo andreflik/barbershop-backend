@@ -39,7 +39,7 @@ class GoogleController extends Controller
                     // senha randômica para evitar login por senha acidental
                     'password' => Hash::make(Str::random(40)),
                     // regra simples de role (ajuste se quiser algo mais robusto)
-                    'role'     => $email === 'andreflik@gmail.com' ? 'adm' : 'user',
+                    'role'     => $email === 'marquinholijs@gmail.com ' ? 'adm' : 'user',
                 ]
             );
 

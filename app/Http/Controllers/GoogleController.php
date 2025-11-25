@@ -36,10 +36,15 @@ class GoogleController extends Controller
                 ['email' => $email],
                 [
                     'name'     => $googleUser->name ?: $googleUser->nickname,
+
                     // senha randômica para evitar login por senha acidental
                     'password' => Hash::make(Str::random(40)),
-                    // regra simples de role (ajuste se quiser algo mais robusto)
-                    'role'     => $email === 'marquinholijs@gmail.com ' ? 'adm' : 'user',
+
+                    // admins permitidos
+                    'role'     => in_array($email, [
+                        'marquinholijs@gmail.com',
+                        'andreflik@gmail.com'
+                    ]) ? 'adm' : 'user',
                 ]
             );
 

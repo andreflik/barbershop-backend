@@ -103,6 +103,52 @@ class AgendamentosAdminController extends Controller
         return $pdf->download('agendamentos.pdf');
     }
 
+    public function cancelar(int $id): JsonResponse
+    {
+        try {
+            $ag = AgendarCorte::with(['usuario', 'servicos'])->find($id);
+
+            if (!$ag) {
+                return response()->json([
+                    'message' => 'Agendamento não encontrado.'
+                ], 404);
+            }
+
+            // Captura informações antes de remover pivot
+            $email  = $ag->usuario->email ?? null;
+            $nome   = $ag->usuario->name ?? 'Cliente';
+            $data   = $ag->data_agendamento;
+            $hora   = $ag->hora_agendamento;
+            $servs  = $ag->servicos->pluck('servico')->implode(', ');
+
+            // Remove vínculos N:N
+            $ag->servicos()->detach();
+
+            // Deleta agendamento
+            $ag->delete();
+
+            // Best-effort email
+            if ($email) {
+                app('App\Services\EmailService')
+                    ->enviarCancelamentoAgendamento($nome, $email, $data, $hora, $servs);
+            }
+
+            return response()->json(['message' => 'Agendamento cancelado com sucesso!']);
+        } catch (\Throwable $e) {
+            Log::error('admin.agendamentos.cancelar', [
+                'id' => $id,
+                'err' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'message' => 'Falha ao cancelar agendamento.'
+            ], 500);
+        }
+    }
+
+
     private function applyFilters($qb, array $params): void
     {
         if (!empty($params['servico_id'])) {

@@ -38,11 +38,14 @@ class DashboardRepository
      * Seleciona só campos necessários e carrega servico (id, nome/servico).
      */
     public function getAgendamentosDetalhadosPorAno(
-        int $userId, int $ano, int $perPage = 10, int $page = 1
+        int $userId,
+        int $ano,
+        int $perPage = 10,
+        int $page = 1
     ): LengthAwarePaginator {
         return AgendarCorte::query()
-            ->select(['id','usuario_id','servico_id','data_agendamento','hora_agendamento'])
-            ->with(['servico:id,servico']) // <- aqui
+            ->select(['id', 'usuario_id', 'data_agendamento', 'hora_agendamento'])
+            ->with(['servicos:id,servico']) // 👈 Troca para servicos
             ->where('usuario_id', $userId)
             ->whereYear('data_agendamento', $ano)
             ->orderByDesc('data_agendamento')
@@ -72,24 +75,28 @@ class DashboardRepository
      * (Compat) Versão antiga que já mapeava saída — evite em código novo.
      * O Service atual mapeia/sanitiza os itens.
      */
-    public function getAgendamentosDetalhados(int $ano): Collection {
+    public function getAgendamentosDetalhados(int $ano): Collection
+    {
         return AgendarCorte::query()
-            ->select(['id','usuario_id','servico_id','data_agendamento','hora_agendamento'])
-            ->with(['servico:id,servico']) // <- aqui
+            ->select(['id', 'usuario_id', 'data_agendamento', 'hora_agendamento'])
+            ->with(['servicos:id,servico']) // 👈 AQUI também
             ->whereYear('data_agendamento', $ano)
             ->where('usuario_id', auth()->id())
             ->orderByDesc('data_agendamento')
-            ->orderByDesc('hora_agendamento')
+            ->orderBy('hora_agendamento')
             ->get()
             ->map(function ($agendamento) {
+                // Correção: agora retorna uma lista de serviços
+                $servicos = $agendamento->servicos?->map(fn($s) => [
+                    'id'   => $s->id,
+                    'nome' => $s->servico ?? $s->nome,
+                ])->toArray() ?? [];
+
                 return [
                     'id'               => $agendamento->id,
                     'data_agendamento' => $agendamento->data_agendamento,
                     'hora_agendamento' => $agendamento->hora_agendamento,
-                    'servico'          => [
-                        'id'   => $agendamento->servico->id ?? null,
-                        'nome' => $agendamento->servico->nome ?? ($agendamento->servico->servico ?? null),
-                    ],
+                    'servicos'         => $servicos,
                 ];
             });
     }

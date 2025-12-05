@@ -31,15 +31,14 @@ class AgendamentosAdminController extends Controller
         $hoje = Carbon::now('America/Sao_Paulo')->toDateString();
 
         $qb = AgendarCorte::query()
-            ->select(['id', 'usuario_id', 'servico_id', 'data_agendamento', 'hora_agendamento'])
+            ->select(['id', 'usuario_id', 'data_agendamento', 'hora_agendamento'])
             ->with([
                 'usuario:id,name',
-                'servico:id,servico',
+                'servicos:id,servico',
             ])
-            // 🔹 AQUI ESTÁ A MÁGICA: coloca os do dia atual primeiro
             ->orderByRaw("CASE WHEN data_agendamento = ? THEN 0 ELSE 1 END", [$hoje])
-            ->orderBy('data_agendamento', 'asc')   // mantém o dia atual em cima e depois os futuros
-            ->orderBy('hora_agendamento', 'asc');  // ordena pelas horas dentro do dia
+            ->orderBy('data_agendamento', 'asc')
+            ->orderBy('hora_agendamento', 'asc');
 
         $this->applyFilters($qb, $validated);
 
@@ -58,7 +57,6 @@ class AgendamentosAdminController extends Controller
             return response()->json(['message' => 'Falha ao listar agendamentos.'], 500);
         }
     }
-
 
     public function exportXlsx(Request $request)
     {
@@ -87,10 +85,10 @@ class AgendamentosAdminController extends Controller
         $limit = (int) env('ADMIN_EXPORT_LIMIT', 5000);
 
         $qb = AgendarCorte::query()
-            ->select(['id', 'usuario_id', 'servico_id', 'data_agendamento', 'hora_agendamento'])
-            ->with(['usuario:id,name', 'servico:id,servico'])
+            ->select(['id', 'usuario_id', 'data_agendamento', 'hora_agendamento'])
+            ->with(['usuario:id,name', 'servicos:id,servico'])
             ->orderByDesc('data_agendamento')
-            ->orderBy('hora_agendamento');
+            ->orderBy('hora_agendamento', 'asc');
 
         $this->applyFilters($qb, $validated);
 
@@ -108,7 +106,7 @@ class AgendamentosAdminController extends Controller
     private function applyFilters($qb, array $params): void
     {
         if (!empty($params['servico_id'])) {
-            $qb->where('servico_id', (int) $params['servico_id']);
+            $qb->whereHas('servicos', fn($s) => $s->where('servico_id', (int) $params['servico_id']));
         }
         if (!empty($params['usuario_id'])) {
             $qb->where('usuario_id', (int) $params['usuario_id']);
@@ -120,55 +118,38 @@ class AgendamentosAdminController extends Controller
             $qb->whereYear('data_agendamento', (int) $params['ano']);
         }
         if (!empty($params['q'])) {
-            $q = $params['q'];
-            $qb->where(function ($inner) use ($q) {
-                $inner->whereHas('usuario', fn($u) => $u->where('name', 'like', "%{$q}%"))
-                    // 🔧 procura só em `servico` (coluna existente)
-                    ->orWhereHas('servico', fn($s) => $s->where('servico', 'like', "%{$q}%"));
+            $qb->where(function ($inner) use ($params) {
+                $inner
+                    ->whereHas('usuario', fn($u) => $u->where('name', 'like', "%{$params['q']}%"))
+                    ->orWhereHas(
+                        'servicos',
+                        fn($s) =>
+                        $s->where('servico', 'like', "%{$params['q']}%")
+                    );
             });
         }
     }
 
-
-
     private function mapAgendamentoAdmin($item): array
     {
-        $get = function ($obj, $key, $default = null) {
-            if (is_array($obj)) return $obj[$key] ?? $default;
-            return $obj->{$key} ?? $default;
-        };
-
-        $usuario = $get($item, 'usuario');
-        $servico = $get($item, 'servico');
-
-        // ✅ Ajuste explícito de timezone
-        $dataAgendamento = $get($item, 'data_agendamento');
-        $dataAgendamento = $get($item, 'data_agendamento');
-
-        if ($dataAgendamento) {
-            try {
-                $dataAgendamento = Carbon::parse($dataAgendamento)
-                    ->timezone('America/Sao_Paulo')
-                    ->format('Y-m-d');
-            } catch (\Exception $e) {
-                $dataAgendamento = (string) $dataAgendamento;
-            }
-        }
-
         return [
-            'id'               => $get($item, 'id'),
-            'data_agendamento' => $dataAgendamento,
-            'hora_agendamento' => (string) $get($item, 'hora_agendamento'),
+            'id'               => $item->id,
+            'data_agendamento' => Carbon::parse($item->data_agendamento)
+                ->timezone('America/Sao_Paulo')
+                ->format('Y-m-d'),
+            'hora_agendamento' => (string)$item->hora_agendamento,
             'usuario'          => [
-                'id'   => is_array($usuario) ? ($usuario['id'] ?? null) : ($usuario->id ?? null),
-                'name' => is_array($usuario) ? ($usuario['name'] ?? null) : ($usuario->name ?? null),
+                'id'   => $item->usuario->id,
+                'name' => $item->usuario->name,
             ],
-            'servico'          => [
-                'id'   => is_array($servico) ? ($servico['id'] ?? null) : ($servico->id ?? null),
-                'nome' => is_array($servico)
-                    ? ($servico['servico'] ?? null)
-                    : ($servico->servico ?? null),
-            ],
+            'servicos'         => $item->servicos
+                ->sortBy('servico')
+                ->map(fn($s) => [
+                    'id'   => $s->id,
+                    'nome' => $s->servico
+                ])
+                ->values()
+                ->toArray(),
         ];
     }
 }

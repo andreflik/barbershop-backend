@@ -64,12 +64,13 @@ class AgendaCortesController extends Controller
         $validated = $request->validate([
             'data_agendamento' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'hora_agendamento' => ['required', 'date_format:H:i'],
-            'servico_id'       => ['required', 'integer', 'exists:servicos,id'],
+            'servicos'         => ['required', 'array', 'min:1', 'max:3'],
+            'servicos.*'       => ['integer', 'distinct', 'exists:servicos,id'],
             'observacao'       => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
-            // cria (service deve usar Auth::id e checar conflitos)
+
             $agendamento = $this->agendaCortesService->salvarAgendamento($validated);
 
             // dispara e-mails (best-effort)
@@ -92,17 +93,17 @@ class AgendaCortesController extends Controller
                 'message'      => 'Agendamento salvo com sucesso!',
                 'agendamento'  => $this->mapAgendamentoSafe($agendamento),
             ], 201);
-
         } catch (\DomainException $e) {
             // conflito de horário, etc.
             return response()->json(['message' => $e->getMessage()], 409);
-
         } catch (AuthorizationException $e) {
             return response()->json(['message' => 'Operação não permitida.'], 403);
-
-        } catch (\Throwable $e) {
-            Log::error('Erro ao salvar agendamento.');
-            return response()->json(['message' => 'Não foi possível salvar o agendamento.'], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ], 400);
         }
     }
 

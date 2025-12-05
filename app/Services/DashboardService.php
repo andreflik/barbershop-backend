@@ -27,7 +27,7 @@ class DashboardService
         $paginator = $this->repository->getAgendamentosDetalhadosPorAno($userId, $ano, $perPage, $page);
 
         // Sanitize items (somente campos necessários)
-        $paginator->getCollection()->transform(fn ($i) => $this->mapAgendamento($i));
+        $paginator->getCollection()->transform(fn($i) => $this->mapAgendamento($i));
 
         return [
             'agendamentosPorMes'     => $agregPorMes,
@@ -51,7 +51,7 @@ class DashboardService
         /** @var LengthAwarePaginator $paginator */
         $paginator = $this->repository->getAgendamentosDetalhadosPorAno($userId, $ano, $perPage, page: 1);
 
-        $paginator->getCollection()->transform(fn ($i) => $this->mapAgendamento($i));
+        $paginator->getCollection()->transform(fn($i) => $this->mapAgendamento($i));
 
         return $paginator;
     }
@@ -61,31 +61,36 @@ class DashboardService
      */
     private function mapAgendamento($item): array
     {
-        $get = function ($obj, $key, $default = null) {
-            if (is_array($obj)) return $obj[$key] ?? $default;
-            return $obj->{$key} ?? $default;
-        };
+        $servicos = [];
 
-        $serv     = $get($item, 'servico');
-        $servId   = $get($item, 'servico_id');
-        $servNome = null;
+        // Quando já vem carregado via with('servicos')
+        if (!empty($item->servicos) && $item->servicos instanceof \Illuminate\Support\Collection) {
+            $servicos = $item->servicos->map(fn($s) => [
+                'id'   => $s->id,
+                'nome' => $s->servico ?? $s->nome,
+            ])->toArray();
+        }
+        // Fallback: compat antigo de serviço único
+        elseif (!empty($item->servico)) {
+            $servicos[] = [
+                'id'   => $item->servico->id ?? null,
+                'nome' => $item->servico->servico ?? $item->servico->nome ?? null,
+            ];
+        }
 
-        if (is_array($serv)) {
-            $servNome = $serv['nome'] ?? ($serv['servico'] ?? null);
-            $servId   = $serv['id'] ?? $servId;
-        } elseif (is_object($serv)) {
-            $servNome = $serv->nome ?? ($serv->servico ?? null);
-            $servId   = $serv->id ?? $servId;
+        // Garantia: sempre retornar 1+ itens com nome
+        if (empty($servicos)) {
+            $servicos[] = [
+                'id'   => null,
+                'nome' => 'Serviço não informado',
+            ];
         }
 
         return [
-            'id'               => $get($item, 'id'),
-            'data_agendamento' => $get($item, 'data_agendamento'),
-            'hora_agendamento' => $get($item, 'hora_agendamento'),
-            'servico'          => [
-                'id'   => $servId,
-                'nome' => $servNome,
-            ],
+            'id'               => $item->id,
+            'data_agendamento' => $item->data_agendamento,
+            'hora_agendamento' => $item->hora_agendamento,
+            'servicos'         => $servicos,
         ];
     }
 }

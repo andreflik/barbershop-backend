@@ -25,4 +25,14 @@ class Servico extends Model
     {
         return $this->hasMany(AgendarCorte::class, 'servico_id');
     }
+
+    public function agendamentosMulti()
+    {
+        return $this->belongsToMany(
+            AgendarCorte::class,
+            'agendar_corte_servico',
+            'servico_id',
+            'agendamento_id'
+        );
+    }
 }

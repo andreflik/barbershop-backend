@@ -21,14 +21,16 @@ class AgendarCorte extends Model
         'servico_id',
         'data_agendamento',
         'hora_agendamento',
+        'slots_bloqueados',
         'status',
+        'observacao',
     ];
 
     protected $casts = [
-        'data_agendamento' => 'string',
+        'data_agendamento' => 'datetime:Y-m-d',
         'hora_agendamento' => 'string',
+        'slots_bloqueados' => 'integer',
     ];
-
 
     public function usuario()
     {
@@ -38,5 +40,15 @@ class AgendarCorte extends Model
     public function servico()
     {
         return $this->belongsTo(Servico::class, 'servico_id');
+    }
+
+    public function servicos()
+    {
+        return $this->belongsToMany(
+            Servico::class,
+            'agendamento_servico',
+            'agendar_corte_id',
+            'servico_id'
+        );
     }
 }

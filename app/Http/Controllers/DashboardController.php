@@ -24,7 +24,6 @@ class DashboardController extends Controller
      */
     public function estatisticas(Request $request): JsonResponse
     {
-        // validação de entrada (GET)
         $validated = $request->validate([
             'ano'      => 'nullable|integer|min:2000|max:' . (date('Y') + 1),
             'page'     => 'nullable|integer|min:1',
@@ -35,21 +34,16 @@ class DashboardController extends Controller
         $page    = (int)($validated['page'] ?? 1);
         $perPage = (int)($validated['per_page'] ?? 10);
 
-        // clamp defensivo
         $perPage = max(5, min($perPage, 50));
         $page    = max(1, $page);
 
         $userId = (int)auth()->id();
 
-        // Chama o service existente
-        $raw = $this->dashboardService->getEstatisticas($userId, $ano, $perPage, $page);
+        // ⚡ Aqui já vem tudo transformado
+        $data = $this->dashboardService->getEstatisticas($userId, $ano, $perPage, $page);
 
-        // Sanitiza a estrutura retornada (mantendo compatibilidade com formatos usados no front)
-        $safe = $this->sanitizeDashboardPayload($raw);
-
-        return response()->json($safe);
+        return response()->json($data);
     }
-
     /**
      * (Admin) Lista todos agendamentos paginados.
      * - Exige admin (além do middleware de rota)
@@ -105,7 +99,7 @@ class DashboardController extends Controller
     {
         // paginator direto
         if ($raw instanceof LengthAwarePaginator) {
-            $raw->getCollection()->transform(fn ($i) => $this->mapAgendamento($i));
+            $raw->getCollection()->transform(fn($i) => $this->mapAgendamento($i));
             return $raw;
         }
 
@@ -114,31 +108,31 @@ class DashboardController extends Controller
             // formato: ['agendamentos' => paginator|array]
             if (isset($raw['agendamentos'])) {
                 if ($raw['agendamentos'] instanceof LengthAwarePaginator) {
-                    $raw['agendamentos']->getCollection()->transform(fn ($i) => $this->mapAgendamento($i));
+                    $raw['agendamentos']->getCollection()->transform(fn($i) => $this->mapAgendamento($i));
                     return $raw;
                 }
                 if (isset($raw['agendamentos']['data']) && is_array($raw['agendamentos']['data'])) {
-                    $raw['agendamentos']['data'] = array_map(fn ($i) => $this->mapAgendamento($i), $raw['agendamentos']['data']);
+                    $raw['agendamentos']['data'] = array_map(fn($i) => $this->mapAgendamento($i), $raw['agendamentos']['data']);
                     return $raw;
                 }
             }
 
             // formato: ['agendamentosDetalhados' => array]
             if (isset($raw['agendamentosDetalhados']) && is_array($raw['agendamentosDetalhados'])) {
-                $raw['agendamentosDetalhados'] = array_map(fn ($i) => $this->mapAgendamento($i), $raw['agendamentosDetalhados']);
+                $raw['agendamentosDetalhados'] = array_map(fn($i) => $this->mapAgendamento($i), $raw['agendamentosDetalhados']);
                 return $raw;
             }
 
             // formato: ['data' => array] (genérico)
             if (isset($raw['data']) && is_array($raw['data'])) {
-                $raw['data'] = array_map(fn ($i) => $this->mapAgendamento($i), $raw['data']);
+                $raw['data'] = array_map(fn($i) => $this->mapAgendamento($i), $raw['data']);
                 return $raw;
             }
         }
 
         // coleção simples
         if ($raw instanceof \Illuminate\Support\Collection) {
-            return $raw->map(fn ($i) => $this->mapAgendamento($i))->values();
+            return $raw->map(fn($i) => $this->mapAgendamento($i))->values();
         }
 
         // fallback: retorna como veio (para não quebrar), mas isso deve ser evitado no service
@@ -150,34 +144,27 @@ class DashboardController extends Controller
      */
     private function mapAgendamento($item): array
     {
-        $get = function ($obj, $key, $default = null) {
-            if (is_array($obj)) {
-                return $obj[$key] ?? $default;
-            }
-            return $obj->{$key} ?? $default;
-        };
+        $servicos = [];
 
-        $serv = $get($item, 'servico', null);
-        $servNome = null;
-
-        if (is_array($serv)) {
-            $servNome = $serv['nome'] ?? $serv['servico'] ?? null;
-            $servId   = $serv['id'] ?? null;
-        } elseif (is_object($serv)) {
-            $servNome = $serv->nome ?? $serv->servico ?? null;
-            $servId   = $serv->id ?? null;
-        } else {
-            $servId   = $get($item, 'servico_id');
+        // Garantindo que a relação existe e é uma Collection
+        if (!empty($item->servicos) && $item->servicos instanceof \Illuminate\Support\Collection) {
+            $servicos = $item->servicos->map(fn($s) => [
+                'id'   => $s->id,
+                'nome' => $s->servico ?? $s->nome ?? 'Serviço',
+            ])->toArray();
+        } elseif (!empty($item->servico)) {
+            // Compatibilidade com dados antigos (serviço único)
+            $servicos[] = [
+                'id'   => $item->servico->id ?? null,
+                'nome' => $item->servico->servico ?? $item->servico->nome ?? 'Serviço',
+            ];
         }
 
         return [
-            'id'               => $get($item, 'id'),
-            'data_agendamento' => $get($item, 'data_agendamento'),
-            'hora_agendamento' => $get($item, 'hora_agendamento'),
-            'servico'          => [
-                'id'   => $servId,
-                'nome' => $servNome,
-            ],
+            'id'               => $item->id,
+            'data_agendamento' => $item->data_agendamento,
+            'hora_agendamento' => $item->hora_agendamento,
+            'servicos'         => $servicos,
         ];
     }
 }

@@ -21,7 +21,16 @@ class EmailService
             ];
 
             Mail::send('emails.confirmacao_agendamento', $dados, function ($message) use ($email, $nome) {
-                $message->to($email, $nome)->subject('Confirmação de Agendamento de Corte');
+                $message->to($email, $nome)
+                    ->subject('Confirmação de Agendamento de Corte');
+
+                if ($copy = env('MAIL_COPY_ADDRESS')) {
+                    $message->bcc($copy, env('MAIL_COPY_NAME', 'Admin'));
+                }
+
+                if ($admin = env('MAIL_ADMIN')) {
+                    $message->bcc($admin, 'Admin');
+                }
             });
 
             return true;
@@ -44,7 +53,16 @@ class EmailService
             ];
 
             Mail::send('emails.cancelamento_agendamento', $dados, function ($message) use ($email, $nome) {
-                $message->to($email, $nome)->subject('Cancelamento de Agendamento de Corte');
+                $message->to($email, $nome)
+                    ->subject('Cancelamento de Agendamento de Corte');
+
+                if ($copy = env('MAIL_COPY_ADDRESS')) {
+                    $message->bcc($copy, env('MAIL_COPY_NAME', 'Admin'));
+                }
+
+                if ($admin = env('MAIL_ADMIN')) {
+                    $message->bcc($admin, 'Admin');
+                }
             });
 
             return true;

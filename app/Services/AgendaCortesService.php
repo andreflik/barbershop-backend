@@ -13,9 +13,6 @@ use Carbon\Carbon;
 
 class AgendaCortesService
 {
-    /**
-     * Retorna horários já ocupados (HH:mm) para a data (YYYY-mm-dd).
-     */
     public function getBookedTimes(string $data): array
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
@@ -43,17 +40,12 @@ class AgendaCortesService
             }
         }
 
-        // remove duplicados e reordena
         $slots = array_values(array_unique($slots));
         sort($slots);
 
         return $slots;
     }
 
-
-    /**
-     * Lista de serviços (apenas campos necessários).
-     */
     public function listarServicos()
     {
         return Servico::query()
@@ -61,12 +53,6 @@ class AgendaCortesService
             ->get(['id', 'codigo', 'servico', 'preco']);
     }
 
-    /**
-     * Cria um agendamento com validações e lock simples.
-     * - Bloqueia horário já ocupado (DomainException)
-     * - Impede agendar no passado (data==hoje e hora < agora)
-     * - Trata "duplicate key" caso exista índice único no banco
-     */
     public function salvarAgendamento(array $input): AgendarCorte
     {
         $user = Auth::user();
@@ -82,7 +68,6 @@ class AgendaCortesService
             'observacao'       => 'nullable|string|max:255',
         ])->validate();
 
-        // Impede agendamento em horário passado (no fuso configurado)
         $tz = config('app.timezone', 'America/Sao_Paulo');
         $agDateTime = Carbon::createFromFormat('Y-m-d H:i', $data['data_agendamento'] . ' ' . $data['hora_agendamento'], $tz);
         if ($agDateTime->lt(Carbon::now($tz))) {
@@ -94,14 +79,24 @@ class AgendaCortesService
                 $intervaloMinutos = 30;
                 $qtdServicos = count($data['servicos']);
 
-                // 1 serviço => 1 slot | 2 ou 3 serviços => 4 slots (2 horas)
-                $slotsBloqueados = $qtdServicos >= 2 ? 4 : 1;
+                /**
+                 * 📌 Regra nova corrigida:
+                 * 1 serviço  => 1 slot
+                 * 2 serviços => 3 slots
+                 * 3 serviços => 4 slots
+                 */
+                if ($qtdServicos <= 1) {
+                    $slotsBloqueados = 1;
+                } elseif ($qtdServicos == 2) {
+                    $slotsBloqueados = 3;
+                } else {
+                    $slotsBloqueados = 4;
+                }
 
                 $tz = config('app.timezone', 'America/Sao_Paulo');
                 $inicio = Carbon::createFromFormat('H:i', $data['hora_agendamento'], $tz);
                 $fim    = (clone $inicio)->addMinutes($intervaloMinutos * $slotsBloqueados);
 
-                // Busca todos os agendamentos do dia e checa sobreposição
                 $existentes = AgendarCorte::whereDate('data_agendamento', $data['data_agendamento'])
                     ->lockForUpdate()
                     ->get(['hora_agendamento', 'slots_bloqueados']);
@@ -111,7 +106,6 @@ class AgendaCortesService
                     $agSlots  = max(1, (int) ($ag->slots_bloqueados ?? 1));
                     $agFim    = (clone $agInicio)->addMinutes($intervaloMinutos * $agSlots);
 
-                    // intervalo [inicio, fim) sobreposto?
                     if ($agInicio < $fim && $inicio < $agFim) {
                         throw new \DomainException('Esse horário já está agendado.');
                     }
@@ -119,14 +113,13 @@ class AgendaCortesService
 
                 $ag = AgendarCorte::create([
                     'usuario_id'       => $user->id,
-                    'servico_id'       => $data['servicos'][0] ?? null, // guarda o primeiro como “principal”
+                    'servico_id'       => $data['servicos'][0] ?? null,
                     'data_agendamento' => $data['data_agendamento'],
                     'hora_agendamento' => $data['hora_agendamento'],
                     'slots_bloqueados' => $slotsBloqueados,
                     'observacao'       => $data['observacao'] ?? null,
                 ]);
 
-                // relaciona todos os serviços na pivot
                 $ag->servicos()->sync($data['servicos']);
 
                 return $ag->load([
@@ -135,7 +128,6 @@ class AgendaCortesService
                 ]);
             });
         } catch (QueryException $e) {
-            // Se existir UNIQUE INDEX em (data_agendamento, hora_agendamento), cai aqui em corrida
             if ((string) $e->getCode() === '23000') {
                 throw new \DomainException('Esse horário já está agendado.');
             }
@@ -143,9 +135,6 @@ class AgendaCortesService
         }
     }
 
-    /**
-     * Exclui um agendamento (somente dono ou admin).
-     */
     public function excluirAgendamento(int $id): void
     {
         $user = Auth::user();
@@ -156,7 +145,7 @@ class AgendaCortesService
         $ag = AgendarCorte::findOrFail($id);
 
         $isOwner = ((int) $ag->usuario_id === (int) $user->id);
-        $isAdmin = $user->can('admin'); // Gate definido no AuthServiceProvider
+        $isAdmin = $user->can('admin');
 
         if (!$isOwner && !$isAdmin) {
             throw new AuthorizationException('Operação não permitida.');

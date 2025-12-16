@@ -22,13 +22,27 @@ class AppointmentConfirmed extends Mailable
     {
         $ag = $this->agendamento;
 
-        // Protege contra nulos/strings e evita ->format() em string
+        // Cliente
         $cliente = optional($ag->usuario)->name ?: 'Cliente';
-        $servico = optional($ag->servico)->servico ?: 'Serviço';
-        $dataPt  = !empty($ag->data_agendamento)
+
+        // 🔥 SERVIÇOS (corrigido para múltiplos)
+        if ($ag->relationLoaded('servicos') && $ag->servicos->count() > 0) {
+            $servico = $ag->servicos
+                ->pluck('servico')
+                ->filter()
+                ->implode(', ');
+        } else {
+            // fallback seguro (caso raro)
+            $servico = optional($ag->servico)->servico ?: 'Serviço';
+        }
+
+        // Data formatada
+        $dataPt = !empty($ag->data_agendamento)
             ? date('d/m/Y', strtotime((string) $ag->data_agendamento))
             : '-';
-        $horaPt  = !empty($ag->hora_agendamento)
+
+        // Hora formatada
+        $horaPt = !empty($ag->hora_agendamento)
             ? substr((string) $ag->hora_agendamento, 0, 5)
             : '-';
 
@@ -43,7 +57,7 @@ class AppointmentConfirmed extends Mailable
             ->view('emails.confirmacao_agendamento')
             ->with([
                 'cliente' => $cliente,
-                'servico' => $servico,
+                'servico' => $servico, // agora pode ser 1, 2 ou 3 serviços
                 'dataPt'  => $dataPt,
                 'horaPt'  => $horaPt,
             ]);

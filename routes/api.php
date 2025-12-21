@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AgendamentosAdminController;
 use App\Http\Controllers\ServicosController;
 use App\Http\Controllers\UsuariosAdminController;
+use App\Http\Controllers\Admin\BlockedDatesController;
 
 /*
 |--------------------------------------------------------------------------
@@ -134,6 +135,10 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])
         // Usuários (admin)
         Route::get('usuarios', [UsuariosAdminController::class, 'index']);
         Route::get('usuarios/options', [UsuariosAdminController::class, 'options']);
+
+        Route::get('blocked-dates', [BlockedDatesController::class, 'index']);
+        Route::post('blocked-dates', [BlockedDatesController::class, 'store']);
+        Route::delete('blocked-dates/{id}', [BlockedDatesController::class, 'destroy']);
     });
 
 /*

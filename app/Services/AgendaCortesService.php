@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AgendarCorte;
 use App\Models\Servico;
+use App\Models\BlockedDate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,19 @@ class AgendaCortesService
                     ->copy()
                     ->addMinutes($intervaloMinutos * $i)
                     ->format('H:i');
+            }
+        }
+
+        $blocked = BlockedDate::whereDate('data', $data)->exists();
+
+        if ($blocked) {
+            $inicio = Carbon::createFromTime(7, 8);
+            $fim = Carbon::createFromTime(18, 0);
+            $slots = [];
+
+            while ($inicio <= $fim) {
+                $slots[] = $inicio->format('H:i');
+                $inicio->addMinutes(30);
             }
         }
 
@@ -79,12 +93,6 @@ class AgendaCortesService
                 $intervaloMinutos = 30;
                 $qtdServicos = count($data['servicos']);
 
-                /**
-                 * 📌 Regra nova corrigida:
-                 * 1 serviço  => 1 slot
-                 * 2 serviços => 3 slots
-                 * 3 serviços => 4 slots
-                 */
                 if ($qtdServicos <= 1) {
                     $slotsBloqueados = 1;
                 } elseif ($qtdServicos == 2) {
@@ -132,6 +140,14 @@ class AgendaCortesService
                 throw new \DomainException('Esse horário já está agendado.');
             }
             throw $e;
+        }
+
+        $blocked = BlockedDate::whereDate('data', $data['data_agendamento'])->firts();
+
+        if ($blocked) {
+            throw new \DomainException(
+                $blocked->motivo ? "Data indisponível: {$blocked->motivo}" : 'Essa data esta indisponível para agendamento.'
+            );
         }
     }
 

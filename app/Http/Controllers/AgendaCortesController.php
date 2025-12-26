@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\AppointmentConfirmed;
+use App\Models\BlockedDate;
 use Illuminate\Auth\Access\AuthorizationException;
 
 class AgendaCortesController extends Controller
@@ -152,5 +153,19 @@ class AgendaCortesController extends Controller
                 'nome' => $servNome,
             ],
         ];
+    }
+
+    public function blockedDates(): JsonResponse
+    {
+        $datas =  BlockedDate::query()
+            ->orderBy('data')
+            ->get(['data', 'motivo']);
+
+        return response()->json([
+            'data' => $datas->map(fn($d) => [
+                'data' => $d->data->format('Y-m-d'),
+                'motivo' => $d->motivo,
+            ]),
+        ]);
     }
 }

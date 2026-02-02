@@ -1,0 +1,24 @@
+# Ignorar vendor (será instalado dentro do container)
+vendor
+node_modules
+
+# Arquivos locais do MySQL
+*.sock
+*.pid
+*.cnf
+data/
+mysql_data/
+
+# Logs e caches
+*.log
+storage/logs
+storage/framework/cache
+storage/framework/sessions
+storage/framework/views
+
+# Git
+.git
+.gitignore
+
+# Outros arquivos que não precisa no container
+.env

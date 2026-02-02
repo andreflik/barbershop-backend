@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+    app:
+        build: .
+        container_name: barber_app
+        volumes:
+            - .:/var/www
+            - /var/www/vendor
+            - ./.env:/var/www/.env
+        ports:
+            - "8000:8000"
+        depends_on:
+            mysql:
+                condition: service_healthy
+        environment:
+            DB_CONNECTION: mysql
+            DB_HOST: mysql
+            DB_PORT: 3306
+            DB_DATABASE: barbershop
+            DB_USERNAME: root
+            DB_PASSWORD: root123
+            TZ: America/Sao_Paulo # ✅ Define timezone dentro do container PHP/Laravel
+        networks:
+            - laravel_net
+
+    mysql:
+        image: mysql:8.0
+        container_name: mysql_container
+        restart: always
+        environment:
+            MYSQL_ROOT_PASSWORD: root123
+            MYSQL_DATABASE: barbershop
+            TZ: America/Sao_Paulo # ✅ Define timezone dentro do MySQL
+        ports:
+            - "3306:3306"
+        volumes:
+            - mysql_data:/var/lib/mysql
+            - /etc/localtime:/etc/localtime:ro # ✅ Garante sincronização com o horário do host
+        command: >
+            --default-authentication-plugin=mysql_native_password
+            --character-set-server=utf8mb4
+            --collation-server=utf8mb4_unicode_ci
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "mysqladmin",
+                    "ping",
+                    "-h",
+                    "localhost",
+                    "-uroot",
+                    "-proot123",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        networks:
+            - laravel_net
+
+volumes:
+    mysql_data:
+
+networks:
+    laravel_net:
+        driver: bridge

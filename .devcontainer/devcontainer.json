@@ -1,0 +1,13 @@
+{
+  "name": "BarberApp Backend",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "barber_app",
+  "workspaceFolder": "/var/www/html",
+
+  "extensions": [
+    "bmewburn.vscode-intelephense-client",
+    "xdebug.php-debug"
+  ],
+
+  "remoteUser": "www-data"
+}

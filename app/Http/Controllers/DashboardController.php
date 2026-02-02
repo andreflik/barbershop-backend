@@ -167,4 +167,30 @@ class DashboardController extends Controller
             'servicos'         => $servicos,
         ];
     }
+
+    public function meusAgendamentos(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ano'      => 'nullable|integer|min:2000|max:' . (date('Y') + 1),
+            'page'     => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:5|max:50',
+        ]);
+
+        $ano     = (int)($validated['ano'] ?? date('Y'));
+        $page    = (int)($validated['page'] ?? 1);
+        $perPage = (int)($validated['per_page'] ?? 10);
+
+        $query = AgendarCorte::query()
+            ->where('usuario_id', auth()->id())
+            ->with(['servicos:id,servico,nome'])
+            ->whereYear('data_agendamento', $ano)
+            ->orderBy('data_agendamento')
+            ->orderBy('hora_agendamento');
+
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+
+        $paginator->getCollection()->transform(fn($item) => $this->mapAgendamento($item));
+
+        return response()->json($paginator);
+    }
 }

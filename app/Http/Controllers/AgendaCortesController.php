@@ -8,7 +8,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\AppointmentConfirmed;
+use App\Models\AgendarCorte;
 use App\Models\BlockedDate;
+use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 
 class AgendaCortesController extends Controller
@@ -23,15 +25,36 @@ class AgendaCortesController extends Controller
     /**
      * Horários já agendados para a data.
      */
-    public function getBookedTimes(string $data): JsonResponse
+    public function getBookedTimes(string $data): array
     {
-        // valida data (YYYY-mm-dd) rapidamente
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
-            return response()->json(['message' => 'Data inválida.'], 422);
+            return [];
         }
 
-        $bookedTimes = $this->agendaCortesService->getBookedTimes($data);
-        return response()->json(['bookedTimes' => $bookedTimes]);
+        $tz = config('app.timezone', 'America/Sao_Paulo');
+        $intervaloMinutos = 30;
+
+        $agendamentos = AgendarCorte::whereDate('data_agendamento', $data)
+            ->orderBy('hora_agendamento')
+            ->get(['hora_agendamento', 'slots_bloqueados']);
+
+        $slots = [];
+
+        foreach ($agendamentos as $ag) {
+            // ✅ aceita HH:mm ou HH:mm:ss
+            $inicio = Carbon::parse($ag->hora_agendamento, $tz);
+
+            $qtdSlots = max(1, (int) ($ag->slots_bloqueados ?? 1));
+
+            for ($i = 0; $i < $qtdSlots; $i++) {
+                $slots[] = $inicio
+                    ->copy()
+                    ->addMinutes($intervaloMinutos * $i)
+                    ->format('H:i');
+            }
+        }
+
+        return array_values(array_unique($slots));
     }
 
     /**
@@ -155,17 +178,10 @@ class AgendaCortesController extends Controller
         ];
     }
 
-    public function blockedDates(): JsonResponse
+    public function blockedDates()
     {
-        $datas =  BlockedDate::query()
-            ->orderBy('data')
-            ->get(['data', 'motivo']);
-
-        return response()->json([
-            'data' => $datas->map(fn($d) => [
-                'data' => $d->data->format('Y-m-d'),
-                'motivo' => $d->motivo,
-            ]),
-        ]);
+        return response()->json(
+            BlockedDate::select('data', 'motivo')->get()
+        );
     }
 }

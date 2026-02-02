@@ -30,7 +30,12 @@ class AgendaCortesService
         $slots = [];
 
         foreach ($agendamentos as $ag) {
-            $inicio = Carbon::createFromFormat('H:i:s', $ag->hora_agendamento, $tz);
+            /**
+             * 🔥 CORREÇÃO CRÍTICA AQUI
+             * hora_agendamento vem como "07:00"
+             */
+            $inicio = Carbon::createFromFormat('H:i', substr($ag->hora_agendamento, 0, 5), $tz);
+
             $qtdSlots = max(1, (int) ($ag->slots_bloqueados ?? 1));
 
             for ($i = 0; $i < $qtdSlots; $i++) {
@@ -41,24 +46,9 @@ class AgendaCortesService
             }
         }
 
-        $blocked = BlockedDate::whereDate('data', $data)->exists();
-
-        if ($blocked) {
-            $inicio = Carbon::createFromTime(7, 8);
-            $fim = Carbon::createFromTime(18, 0);
-            $slots = [];
-
-            while ($inicio <= $fim) {
-                $slots[] = $inicio->format('H:i');
-                $inicio->addMinutes(30);
-            }
-        }
-
-        $slots = array_values(array_unique($slots));
-        sort($slots);
-
-        return $slots;
+        return array_values(array_unique($slots));
     }
+
 
     public function listarServicos()
     {

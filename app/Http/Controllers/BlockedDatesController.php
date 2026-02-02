@@ -5,87 +5,49 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\BlockedDate;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 class BlockedDatesController extends Controller
 {
+    public function publicIndex(): JsonResponse
+    {
+        return response()->json([
+            'blocked_dates' => BlockedDate::query()
+                ->orderBy('data')
+                ->get(['id', 'data', 'motivo'])
+        ]);
+    }
 
     public function index(): JsonResponse
     {
-        $items = BlockedDate::query()
-            ->orderBy('data')
-            ->get()
-            ->map(fn($b) => [
-                'id'     => $b->id,
-                'data'   => $b->data->format('Y-m-d'),
-                'motivo' => $b->motivo,
-            ]);
-
-        return response()->json([
-            'data' => $items,
-        ]);
+        return response()->json(
+            BlockedDate::with('creator:id,name')
+                ->orderBy('data')
+                ->get()
+        );
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request)
     {
-        $validated = $request->validate([
-            'data'   => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+        $data = $request->validate([
+            'data'   => ['required', 'date_format:Y-m-d', 'unique:blocked_dates,data'],
             'motivo' => ['required', 'string', 'max:255'],
         ]);
 
-        try {
-            $exists = BlockedDate::whereDate('data', $validated['data'])->exists();
-            if ($exists) {
-                return response()->json([
-                    'message' => 'Essa data já está bloqueada.',
-                ], 409);
-            }
+        $blocked = BlockedDate::create([
+            'data'       => $data['data'],
+            'motivo'     => $data['motivo'],
+            'created_by' => Auth::id(),
+        ]);
 
-            $blocked = BlockedDate::create([
-                'data'       => $validated['data'],
-                'motivo'     => $validated['motivo'],
-                'created_by' => Auth::id(),
-            ]);
-
-            return response()->json([
-                'message' => 'Data bloqueada com sucesso.',
-                'data'    => [
-                    'id'     => $blocked->id,
-                    'data'   => $blocked->data->format('Y-m-d'),
-                    'motivo' => $blocked->motivo,
-                ],
-            ], 201);
-        } catch (\Throwable $e) {
-            Log::error('admin.blocked_dates.store', [
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'message' => 'Erro ao bloquear a data.',
-            ], 500);
-        }
+        return response()->json($blocked, 201);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(int $id)
     {
-        try {
-            $blocked = BlockedDate::findOrFail($id);
-            $blocked->delete();
+        BlockedDate::findOrFail($id)->delete();
 
-            return response()->json([
-                'message' => 'Bloqueio removido com sucesso.',
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('admin.blocked_dates.destroy', [
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'message' => 'Erro ao remover bloqueio.',
-            ], 500);
-        }
+        return response()->json(['message' => 'Bloqueio removido']);
     }
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\AgendamentosAdminController;
 use App\Http\Controllers\ServicosController;
 use App\Http\Controllers\UsuariosAdminController;
 use App\Http\Controllers\Admin\BlockedDatesController;
+use App\Models\BlockedDate;
 
 /*
 |--------------------------------------------------------------------------
@@ -72,6 +73,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         ->whereNumber('id')
         ->middleware('throttle:30,1');
 
+    Route::get('agendar-corte/me', [DashboardController::class, 'meusAgendamentos']);
+
     // Dashboard geral (paginado)
     Route::get('dashboard/estatisticas/{ano?}', [DashboardController::class, 'estatisticas'])
         ->where('ano', '^\d{4}$');
@@ -85,6 +88,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
         ->name('calendar.list');
 
     Route::get('/servicos-publicos', [ServicosController::class, 'publicList']);
+
+    Route::get('/blocked-dates', [BlockedDatesController::class, 'publicIndex']);
 });
 
 /*

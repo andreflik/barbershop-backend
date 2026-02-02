@@ -17,4 +17,9 @@ class BlockedDate extends Model
     protected $casts = [
         'data' => 'date:Y-m-d',
     ];
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

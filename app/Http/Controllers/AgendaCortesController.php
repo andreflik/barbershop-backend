@@ -12,23 +12,29 @@ use App\Models\AgendarCorte;
 use App\Models\BlockedDate;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
+use App\Services\BlockedPeriodService;
 
 class AgendaCortesController extends Controller
 {
     protected AgendaCortesService $agendaCortesService;
+    protected BlockedPeriodService $blockedPeriodService;
 
-    public function __construct(AgendaCortesService $agendaCortesService)
+    public function __construct(AgendaCortesService $agendaCortesService, BlockedPeriodService $blockedPeriodService)
     {
         $this->agendaCortesService = $agendaCortesService;
+        $this->blockedPeriodService = $blockedPeriodService;
     }
 
-    /**
-     * Horários já agendados para a data.
-     */
-    public function getBookedTimes(string $data): array
+    public function getBookedTimes(string $data): JsonResponse
     {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $data)) {
-            return [];
+            return response()->json(['bookedTimes' => []], 422);
+        }
+
+        if ($this->blockedPeriodService->isDayBlocked($data)) {
+            return response()->json([
+                'bookedTimes' => ['FULL_DAY']
+            ]);
         }
 
         $tz = config('app.timezone', 'America/Sao_Paulo');
@@ -41,7 +47,6 @@ class AgendaCortesController extends Controller
         $slots = [];
 
         foreach ($agendamentos as $ag) {
-            // ✅ aceita HH:mm ou HH:mm:ss
             $inicio = Carbon::parse($ag->hora_agendamento, $tz);
 
             $qtdSlots = max(1, (int) ($ag->slots_bloqueados ?? 1));
@@ -54,18 +59,19 @@ class AgendaCortesController extends Controller
             }
         }
 
-        return array_values(array_unique($slots));
+        $bloqueados = $this->blockedPeriodService->getBlockedTimes($data);
+
+        $final = array_values(array_unique(array_merge($slots, $bloqueados)));
+
+        return response()->json([
+            'bookedTimes' => $final
+        ]);
     }
 
-    /**
-     * Lista serviços para o agendamento (público/autenticado).
-     * Retorna apenas campos necessários.
-     */
     public function listarServicos(): JsonResponse
     {
         $servicos = $this->agendaCortesService->listarServicos();
 
-        // normaliza: id, nome (ou servico), duracao_minutos, preco
         $safe = collect($servicos)->map(function ($s) {
             $arr = is_array($s) ? $s : $s->toArray();
             return [
@@ -79,12 +85,8 @@ class AgendaCortesController extends Controller
         return response()->json(['servicos' => $safe]);
     }
 
-    /**
-     * Cria um novo agendamento.
-     */
     public function salvarAgendamento(Request $request): JsonResponse
     {
-        // validação
         $validated = $request->validate([
             'data_agendamento' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
             'hora_agendamento' => ['required', 'date_format:H:i'],
@@ -93,11 +95,29 @@ class AgendaCortesController extends Controller
             'observacao'       => ['nullable', 'string', 'max:255'],
         ]);
 
+        $data = $validated['data_agendamento'];
+        $hora = $validated['hora_agendamento'];
+
+        $slots = match (count($validated['servicos'])) {
+            1 => 1,
+            2 => 3,
+            default => 4,
+        };
+
+        if (! $this->blockedPeriodService->canSchedule(
+            $data,
+            $hora,
+            $slots
+        )) {
+            return response()->json([
+                'message' => 'Horário indisponível para agendamento.'
+            ], 422);
+        }
+
         try {
 
             $agendamento = $this->agendaCortesService->salvarAgendamento($validated);
 
-            // dispara e-mails (best-effort)
             try {
                 $user = $request->user();
                 if ($user && $user->email) {
@@ -107,18 +127,15 @@ class AgendaCortesController extends Controller
                     Mail::to($admin)->send(new AppointmentConfirmed($agendamento));
                 }
             } catch (\Throwable $mailErr) {
-                // log discreto
                 Log::error('Falha ao enviar e-mail de confirmação.');
             }
 
-            // resposta segura/minimalista
             return response()->json([
                 'success'      => true,
                 'message'      => 'Agendamento salvo com sucesso!',
                 'agendamento'  => $this->mapAgendamentoSafe($agendamento),
             ], 201);
         } catch (\DomainException $e) {
-            // conflito de horário, etc.
             return response()->json(['message' => $e->getMessage()], 409);
         } catch (AuthorizationException $e) {
             return response()->json(['message' => 'Operação não permitida.'], 403);
@@ -131,9 +148,6 @@ class AgendaCortesController extends Controller
         }
     }
 
-    /**
-     * Exclui um agendamento.
-     */
     public function excluirAgendamento(int $id): JsonResponse
     {
         try {
@@ -149,7 +163,6 @@ class AgendaCortesController extends Controller
 
     private function mapAgendamentoSafe($ag): array
     {
-        // aceita Model ou array
         $get = function ($obj, $key, $default = null) {
             if (is_array($obj)) return $obj[$key] ?? $default;
             return $obj->{$key} ?? $default;

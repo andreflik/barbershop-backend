@@ -12,6 +12,7 @@ use App\Http\Controllers\AgendamentosAdminController;
 use App\Http\Controllers\ServicosController;
 use App\Http\Controllers\UsuariosAdminController;
 use App\Http\Controllers\Admin\BlockedDatesController;
+use App\Http\Controllers\BlockedPeriodsController;
 use App\Models\BlockedDate;
 
 /*
@@ -56,13 +57,10 @@ Route::get('/servicos-publicos', [ServicosController::class, 'options'])
 */
 
 Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
-    // Perfil simples
     Route::get('user/name', [GoogleController::class, 'getUsername']);
 
-    // Agendar corte (usuário)
     Route::get('agendar-corte/servicos', [AgendaCortesController::class, 'listarServicos']);
 
-    // Booked times para data YYYY-MM-DD (evita colisão com /{id})
     Route::get('agendar-corte/{data}', [AgendaCortesController::class, 'getBookedTimes'])
         ->where('data', '^\d{4}-\d{2}-\d{2}$');
 
@@ -75,11 +73,9 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
     Route::get('agendar-corte/me', [DashboardController::class, 'meusAgendamentos']);
 
-    // Dashboard geral (paginado)
     Route::get('dashboard/estatisticas/{ano?}', [DashboardController::class, 'estatisticas'])
         ->where('ano', '^\d{4}$');
 
-    // Calendar (se estiver usando esses endpoints)
     Route::post('calendar/create', [CalendarController::class, 'createEvent'])
         ->name('calendar.create')
         ->middleware('throttle:30,1');
@@ -96,21 +92,14 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 |--------------------------------------------------------------------------
 | Admin (auth + middleware admin)
 |--------------------------------------------------------------------------
-| - Substitui can:admin por admin (EnsureUserIsAdmin)
-| - Rate limit geral e limites mais rígidos para exportações/escrita
 */
 
 Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])
     ->prefix('admin')
     ->group(function () {
 
-        // (Opcional) ping para diagnóstico rápido
-        // Route::get('ping', fn() => response()->json(['ok' => true]));
-
-        // Dashboard/admin
         Route::get('dashboard', [DashboardController::class, 'estatisticas']);
 
-        // Agendamentos (admin)
         Route::get('agendamentos', [AgendamentosAdminController::class, 'index']);
         Route::post('agendamentos', [AgendamentosAdminController::class, 'store'])
             ->middleware('throttle:30,1');
@@ -118,13 +107,11 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])
             ->whereNumber('id')
             ->middleware('throttle:30,1');
 
-        // Exports (custosos)
         Route::get('agendamentos/export/xlsx', [AgendamentosAdminController::class, 'exportXlsx'])
             ->middleware('throttle:5,1');
         Route::get('agendamentos/export/pdf', [AgendamentosAdminController::class, 'exportPdf'])
             ->middleware('throttle:5,1');
 
-        // Serviços (admin)
         Route::get('servicos', [ServicosController::class, 'index']);
         Route::post('servicos', [ServicosController::class, 'store'])
             ->middleware('throttle:30,1');
@@ -137,13 +124,16 @@ Route::middleware(['auth:sanctum', 'admin', 'throttle:api'])
         Route::get('servicos/options', [ServicosController::class, 'options']);
 
 
-        // Usuários (admin)
         Route::get('usuarios', [UsuariosAdminController::class, 'index']);
         Route::get('usuarios/options', [UsuariosAdminController::class, 'options']);
 
         Route::get('blocked-dates', [BlockedDatesController::class, 'index']);
         Route::post('blocked-dates', [BlockedDatesController::class, 'store']);
         Route::delete('blocked-dates/{id}', [BlockedDatesController::class, 'destroy']);
+
+        Route::get('blocked-periods', [BlockedPeriodsController::class, 'index']);
+        Route::post('blocked-periods', [BlockedPeriodsController::class, 'store']);
+        Route::delete('blocked-periods/{id}', [BlockedPeriodsController::class, 'destroy']);
     });
 
 /*

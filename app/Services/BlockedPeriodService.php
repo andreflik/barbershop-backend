@@ -45,11 +45,11 @@ class BlockedPeriodService
         $blocked = [];
         $blocks = $this->getBlockedPeriodsForDate($date);
 
-        foreach ($blocks as $block) {
-            if ($block->is_full_day) {
-                return ['FULL_DAY'];
-            }
+        if ($blocks->contains(fn($b) => $b->is_full_day)) {
+            return ['FULL_DAY'];
+        }
 
+        foreach ($blocks as $block) {
             if ($block->start_time && $block->end_time) {
                 $start = Carbon::createFromFormat('H:i:s', $block->start_time);
                 $end   = Carbon::createFromFormat('H:i:s', $block->end_time);
@@ -63,6 +63,8 @@ class BlockedPeriodService
 
         return array_values(array_unique($blocked));
     }
+
+
 
     public function canSchedule(
         string $date,

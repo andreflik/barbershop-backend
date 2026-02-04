@@ -86,6 +86,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/servicos-publicos', [ServicosController::class, 'publicList']);
 
     Route::get('/blocked-dates', [BlockedDatesController::class, 'publicIndex']);
+
+    Route::get('agendar-corte/bloqueios', [BlockedPeriodsController::class, 'publicByMonth']);
 });
 
 /*

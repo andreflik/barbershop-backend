@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\BlockedPeriod;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,61 +11,92 @@ class BlockedPeriodsController extends Controller
 {
     public function index(): JsonResponse
     {
-        $items = BlockedPeriod::orderBy('data')
-            ->orderBy('hora_inicio')
+        $items = BlockedPeriod::query()
+            ->orderBy('date')
+            ->orderBy('time')
             ->get([
                 'id',
-                'data',
-                'hora_inicio',
-                'hora_fim',
-                'motivo',
+                'date',
+                'time',
+                'is_full_day',
+                'reason',
                 'created_by',
-                'created_at'
+                'created_at',
             ]);
 
         return response()->json([
-            'data' => $items
+            'data' => $items,
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'data'         => ['required', 'date_format:Y-m-d'],
-            'hora_inicio'  => ['nullable', 'date_format:H:i'],
-            'hora_fim'     => ['nullable', 'date_format:H:i', 'after:hora_inicio'],
-            'motivo'       => ['required', 'string', 'max:255'],
+            'date'   => ['required', 'date_format:Y-m-d'],
+            'times'  => ['nullable', 'array'],
+            'times.*' => ['date_format:H:i'],
+            'reason' => ['required', 'string', 'max:255'],
         ]);
 
-        if (
-            empty($validated['hora_inicio']) ||
-            empty($validated['hora_fim'])
-        ) {
-            $validated['hora_inicio'] = null;
-            $validated['hora_fim'] = null;
+        if (empty($validated['times'])) {
+            BlockedPeriod::create([
+                'date'        => $validated['date'],
+                'time'        => null,
+                'is_full_day' => true,
+                'reason'      => $validated['reason'],
+                'created_by'  => Auth::id(),
+            ]);
+        } else {
+            foreach ($validated['times'] as $time) {
+                BlockedPeriod::create([
+                    'date'        => $validated['date'],
+                    'time'        => $time,
+                    'is_full_day' => false,
+                    'reason'      => $validated['reason'],
+                    'created_by'  => Auth::id(),
+                ]);
+            }
         }
 
-        $blocked = BlockedPeriod::create([
-            'data'        => $validated['data'],
-            'hora_inicio' => $validated['hora_inicio'],
-            'hora_fim'    => $validated['hora_fim'],
-            'motivo'      => $validated['motivo'],
-            'created_by'  => Auth::id(),
-        ]);
-
         return response()->json([
-            'message' => 'Período bloqueado com sucesso.',
-            'data'    => $blocked
+            'message' => 'Bloqueio cadastrado com sucesso.',
         ], 201);
     }
 
+
     public function destroy(int $id): JsonResponse
     {
-        $item = BlockedPeriod::findOrFail($id);
-        $item->delete();
+        BlockedPeriod::findOrFail($id)->delete();
 
         return response()->json([
-            'message' => 'Bloqueio removido com sucesso.'
+            'message' => 'Bloqueio removido com sucesso.',
+        ]);
+    }
+
+    public function publicByMonth(Request $request): JsonResponse
+    {
+        $month = $request->query('month'); // ex: 2026-02
+
+        if (!$month || !preg_match('/^\d{4}-\d{2}$/', $month)) {
+            return response()->json([
+                'blockedDays' => []
+            ]);
+        }
+
+        [$year, $monthNum] = explode('-', $month);
+
+        $items = BlockedPeriod::query()
+            ->whereYear('date', $year)
+            ->whereMonth('date', $monthNum)
+            ->where('is_full_day', true)
+            ->orderBy('date')
+            ->get(['date', 'reason']);
+
+        return response()->json([
+            'blockedDays' => $items->map(fn($b) => [
+                'date'   => $b->date,
+                'reason' => $b->reason,
+            ]),
         ]);
     }
 }

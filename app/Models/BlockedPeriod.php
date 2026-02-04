@@ -11,8 +11,7 @@ class BlockedPeriod extends Model
 
     protected $fillable = [
         'date',
-        'start_time',
-        'end_time',
+        'time',
         'is_full_day',
         'is_recurring',
         'weekday',

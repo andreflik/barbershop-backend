@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\AppointmentConfirmed;
 use App\Models\AgendarCorte;
 use App\Models\BlockedDate;
+use App\Models\BlockedPeriod;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use App\Services\BlockedPeriodService;
@@ -31,9 +32,13 @@ class AgendaCortesController extends Controller
             return response()->json(['bookedTimes' => []], 422);
         }
 
-        if ($this->blockedPeriodService->isDayBlocked($data)) {
+        $blocked = BlockedPeriod::whereDate('date', $data)->get();
+
+        $fullDay = $blocked->firstWhere('is_full_day', true);
+        if ($fullDay) {
             return response()->json([
-                'bookedTimes' => ['FULL_DAY']
+                'fullDay' => true,
+                'reason'  => $fullDay->reason ?? 'Dia indisponível',
             ]);
         }
 
@@ -44,29 +49,38 @@ class AgendaCortesController extends Controller
             ->orderBy('hora_agendamento')
             ->get(['hora_agendamento', 'slots_bloqueados']);
 
-        $slots = [];
+        $slotsAgendados = [];
 
         foreach ($agendamentos as $ag) {
             $inicio = Carbon::parse($ag->hora_agendamento, $tz);
-
             $qtdSlots = max(1, (int) ($ag->slots_bloqueados ?? 1));
 
             for ($i = 0; $i < $qtdSlots; $i++) {
-                $slots[] = $inicio
+                $slotsAgendados[] = $inicio
                     ->copy()
                     ->addMinutes($intervaloMinutos * $i)
                     ->format('H:i');
             }
         }
 
-        $bloqueados = $this->blockedPeriodService->getBlockedTimes($data);
+        $blockedTimesAdmin = $blocked
+            ->where('is_full_day', false)
+            ->pluck('time')
+            ->filter()
+            ->map(fn($t) => substr($t, 0, 5))
+            ->toArray();
 
-        $final = array_values(array_unique(array_merge($slots, $bloqueados)));
+        $final = array_values(array_unique(array_merge(
+            $slotsAgendados,
+            $blockedTimesAdmin
+        )));
 
         return response()->json([
-            'bookedTimes' => $final
+            'fullDay'     => false,
+            'bookedTimes' => $final,
         ]);
     }
+
 
     public function listarServicos(): JsonResponse
     {

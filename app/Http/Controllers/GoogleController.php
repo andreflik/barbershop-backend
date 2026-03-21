@@ -50,12 +50,15 @@ class GoogleController extends Controller
 
             Auth::login($user);
 
-            // Token Sanctum (expiração via SANCTUM_EXPIRATION)
-            $token = $user->createToken('auth_token')->plainTextToken;
+            $tokenResult = $user->createToken('auth_token');
+
+            $token = $tokenResult->plainTextToken;
+
+            $tokenResult->accessToken->expires_at = now()->addHour();
+            $tokenResult->accessToken->save();
 
             $frontend = rtrim(env('FRONTEND_URL', 'http://localhost:8080'), '/');
 
-            // Fragmento (#) para não vazar no Network/Referer
             return redirect()->away(
                 $frontend . '/dashboard#token=' . $token .
                     '&user=' . urlencode($user->name) .
